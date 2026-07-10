@@ -545,7 +545,9 @@
           2. <b>幫大腦進入狀態</b>——固定聽同一種聲音工作,久了大腦聽到就知道「該專心了」。<br>
           3. <b>助眠</b>——睡前開著海浪或雨聲,搭配「睡眠定時」設 30 分鐘,聲音會慢慢變小自動停止。<br><br>
           <b>混音器用法:</b>每種聲音點一下開、再點一下關,可以同時開好幾種、各自調音量,疊出自己喜歡的氛圍,再按「存目前組合」收藏起來。<br><br>
-          所有聲音都是程式即時合成的,完全離線、不佔空間。
+          聲音是真實環境錄音,第一次載入過後就存在裝置裡,離線也能播。<br><br>
+          <b>音效出處(感謝以下創作者):</b><br>
+          雨聲 by alex36917(CC BY)、海浪 by Luftrum(CC BY)、遠雷 by Digifish music(CC BY)、咖啡廳 by stephan(公有領域)、火堆 by ezwa(公有領域),取自 Blanket 開源專案整理的音效庫。
         </div>
       </details>
       <details class="help">
@@ -967,9 +969,23 @@ const SOUND_DEFS={
   fire:{icon:"🔥", name:"火堆"},
   thunder:{icon:"⛈️", name:"遠雷"}
 };
+// 真實環境音檔(出處與授權見 README / 說明頁);讀不到時退回程式合成
+const SOUND_FILES={
+  rain:"sounds/rain.mp3", ocean:"sounds/ocean.mp3", cafe:"sounds/cafe.mp3",
+  fire:"sounds/fire.mp3", thunder:"sounds/thunder.mp3"
+};
 let mixOn={}, mixVol={rain:60,ocean:60,cafe:60,fire:60,thunder:60};
 let sndNodes={}, sndTimers={}, sndGain={};
+let soundBuffers={}, soundLoading={};
 function volCurve(v){ return Math.pow(v/100,1.5); }
+
+function loadSoundBuffer(name){
+  if(soundBuffers[name]) return Promise.resolve(soundBuffers[name]);
+  return fetch(SOUND_FILES[name])
+    .then(res=>{ if(!res.ok) throw new Error("HTTP "+res.status); return res.arrayBuffer(); })
+    .then(arr=>new Promise((ok,err)=>audioCtx.decodeAudioData(arr,ok,err)))
+    .then(buf=>{ soundBuffers[name]=buf; return buf; });
+}
 
 function makeNoiseBuffer(type){
   const len=audioCtx.sampleRate*2;
@@ -1001,6 +1017,7 @@ function noiseSrc(type){
 function reg(name,node){ sndNodes[name].push(node); return node; }
 function addTimerFor(name,id){ sndTimers[name].push(id); }
 
+/* 以下 buildXxx 是備援用的程式合成音:只有音檔讀不到時才會用到 */
 function buildRain(name,out){
   // 柔和的雨:粉紅噪音為主體,少量高頻沙沙
   const body=reg(name,noiseSrc("pink"));
@@ -1123,12 +1140,29 @@ function startSound(name){
   g.connect(masterGain);
   sndGain[name]=g;
   mixOn[name]=true;
-  SOUND_BUILDERS[name](name,g);
+  soundLoading[name]=true;
   updateSoundCard(name);
+  loadSoundBuffer(name).then(buf=>{
+    soundLoading[name]=false;
+    if(!mixOn[name]) return; // 載入途中被關掉了
+    const src=audioCtx.createBufferSource();
+    src.buffer=buf; src.loop=true;
+    // 避開檔案頭尾,循環接縫比較不會有喀一聲
+    if(buf.duration>1){ src.loopStart=0.03; src.loopEnd=buf.duration-0.05; }
+    src.connect(g); src.start();
+    sndNodes[name].push(src);
+    updateSoundCard(name);
+  }).catch(()=>{
+    // 音檔讀不到(例如直接開檔案、還沒連過網):改用程式合成當備援
+    soundLoading[name]=false;
+    if(!mixOn[name]) return;
+    SOUND_BUILDERS[name](name,g);
+    updateSoundCard(name);
+  });
 }
 function stopSoundOne(name){
   if(!mixOn[name]) return;
-  mixOn[name]=false;
+  mixOn[name]=false; soundLoading[name]=false;
   (sndTimers[name]||[]).forEach(t=>clearTimeout(t)); sndTimers[name]=[];
   (sndNodes[name]||[]).forEach(n=>{ try{n.stop&&n.stop();}catch(e){} try{n.disconnect();}catch(e){} });
   sndNodes[name]=[];
@@ -1150,7 +1184,7 @@ function setVolume(v){
 function updateSoundCard(name){
   const el=$("snd-"+name); if(!el) return;
   el.classList.toggle("playing", !!mixOn[name]);
-  el.querySelector(".state").textContent = mixOn[name] ? "播放中" : "停止中";
+  el.querySelector(".state").textContent = mixOn[name] ? (soundLoading[name]?"載入中…":"播放中") : "停止中";
 }
 function renderSoundGrid(){
   const grid=$("soundGrid"); grid.innerHTML="";

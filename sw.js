@@ -1,6 +1,10 @@
 // 離線快取:第一次開啟後,之後沒網路也能用
-const CACHE = "pomo-v2";
-const FILES = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
+const CACHE = "pomo-v3";
+const FILES = [
+  "./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png",
+  "./sounds/rain.mp3", "./sounds/ocean.mp3", "./sounds/cafe.mp3",
+  "./sounds/fire.mp3", "./sounds/thunder.mp3"
+];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
