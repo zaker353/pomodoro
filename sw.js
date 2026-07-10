@@ -1,9 +1,11 @@
 // 離線快取:第一次開啟後,之後沒網路也能用
-const CACHE = "pomo-v3";
+const CACHE = "pomo-v4";
 const FILES = [
   "./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png",
   "./sounds/rain.mp3", "./sounds/ocean.mp3", "./sounds/cafe.mp3",
-  "./sounds/fire.mp3", "./sounds/thunder.mp3"
+  "./sounds/fire.mp3", "./sounds/thunder.mp3",
+  "./sounds/stream.mp3", "./sounds/birds.mp3", "./sounds/night.mp3",
+  "./sounds/wind.mp3", "./sounds/train.mp3"
 ];
 
 self.addEventListener("install", e => {
