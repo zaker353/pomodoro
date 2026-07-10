@@ -11,7 +11,8 @@
 <title>番茄專注鐘</title>
 <style>
   :root{
-    --bg:#1a1c2c; --card:#242940; --card2:#2d3352; --text:#eef0ff; --dim:#9aa0c3;
+    --bg:#1a1c2c; --card:#242940; --card2:#2d3352; --line:#3a4060;
+    --text:#eef0ff; --dim:#9aa0c3;
     --focus:#ff6b6b; --short:#51cf8e; --long:#5ea8ff; --accent:var(--focus);
     --radius:16px;
   }
@@ -20,218 +21,617 @@
     margin:0; background:var(--bg); color:var(--text);
     font-family:"Microsoft JhengHei","PingFang TC",system-ui,sans-serif;
     display:flex; flex-direction:column; align-items:center;
-    min-height:100vh; padding:12px 12px 40px;
+    min-height:100vh; padding:10px 12px 86px;
   }
   .wrap{width:100%; max-width:480px;}
-  header{display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 0 4px;}
-  header h1{font-size:20px; margin:0; letter-spacing:1px;}
+  header{display:flex; align-items:center; justify-content:center; gap:8px; padding:8px 0 2px;}
+  header h1{font-size:19px; margin:0; letter-spacing:1px;}
+
+  .tab-page{display:none;}
+  .tab-page.active{display:block;}
+
+  /* 底部分頁列 */
+  .bottom-nav{
+    position:fixed; bottom:0; left:0; right:0; z-index:50;
+    display:flex; background:#20243a; border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .bottom-nav button{
+    flex:1; background:none; border:none; color:var(--dim); cursor:pointer;
+    padding:9px 0 7px; font-size:11px; font-family:inherit;
+  }
+  .bottom-nav button .ni{display:block; font-size:20px; margin-bottom:2px;}
+  .bottom-nav button.active{color:var(--accent);}
+
+  /* 每日一句 */
+  #quoteBar{
+    text-align:center; color:var(--dim); font-size:13px; padding:6px 8px 10px;
+    line-height:1.5;
+  }
+
+  /* 情境預設 */
+  .presets{display:flex; gap:8px; margin-bottom:12px;}
+  .presets button{
+    flex:1; padding:9px 2px; border:none; border-radius:12px; cursor:pointer;
+    background:var(--card); color:var(--text); font-size:13px; font-family:inherit;
+  }
+  .presets button small{display:block; color:var(--dim); font-size:10px; margin-top:2px;}
 
   /* 模式切換 */
-  .modes{display:flex; gap:8px; margin:14px 0;}
+  .modes{display:flex; gap:8px; margin:0 0 12px;}
   .modes button{
     flex:1; padding:10px 0; border:none; border-radius:12px; cursor:pointer;
-    background:var(--card); color:var(--dim); font-size:15px; font-weight:bold;
-    transition:all .2s;
+    background:var(--card); color:var(--dim); font-size:15px; font-weight:bold; font-family:inherit;
   }
   .modes button.active{background:var(--accent); color:#fff;}
 
   /* 計時器 */
   .timer-card{
-    background:var(--card); border-radius:var(--radius); padding:24px 16px 20px;
+    background:var(--card); border-radius:var(--radius); padding:20px 16px 16px;
     text-align:center; border:2px solid transparent; transition:border-color .3s;
   }
   .timer-card.running{border-color:var(--accent);}
   #time{
-    font-size:76px; font-weight:bold; letter-spacing:2px; line-height:1;
+    font-size:72px; font-weight:bold; letter-spacing:2px; line-height:1;
     font-variant-numeric:tabular-nums; margin:6px 0 2px;
   }
   #phaseLabel{color:var(--dim); font-size:15px;}
-  #roundLabel{color:var(--dim); font-size:13px; margin-top:6px;}
-  .timer-btns{display:flex; gap:10px; margin-top:18px; justify-content:center;}
+  #roundLabel{color:var(--dim); font-size:12px; margin-top:6px;}
+  .timer-btns{display:flex; gap:10px; margin-top:16px; justify-content:center;}
   .btn{
-    border:none; border-radius:14px; cursor:pointer; font-weight:bold;
-    font-size:16px; padding:14px 0; transition:transform .1s, opacity .2s;
+    border:none; border-radius:14px; cursor:pointer; font-weight:bold; font-family:inherit;
+    font-size:16px; padding:13px 0; transition:transform .1s;
   }
   .btn:active{transform:scale(.96);}
-  #startBtn{flex:2; background:var(--accent); color:#fff; font-size:20px;}
+  #startBtn{flex:2; background:var(--accent); color:#fff; font-size:19px;}
   .btn.sub{flex:1; background:var(--card2); color:var(--dim); font-size:14px;}
+  .timer-tools{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:14px; padding-top:12px; border-top:1px solid var(--line);
+    font-size:13px; color:var(--dim);
+  }
+  .timer-tools .left{display:flex; align-items:center; gap:8px;}
+  .fs-btn{background:none; border:1px solid var(--line); color:var(--dim);
+    border-radius:10px; padding:6px 12px; cursor:pointer; font-size:13px; font-family:inherit;}
+
+  /* 任務選擇 */
+  .task-row{margin-top:12px;}
+  .task-row select{
+    width:100%; padding:12px; border-radius:12px; border:1px solid var(--line);
+    background:var(--card); color:var(--text); font-size:14px; font-family:inherit;
+  }
+
+  /* 休息小任務 */
+  #microCard{
+    display:none; margin-top:12px; background:linear-gradient(135deg,#2b4a3d,#243c52);
+    border-radius:var(--radius); padding:14px; font-size:14px; line-height:1.5;
+  }
 
   section{margin-top:18px;}
-  section h2{font-size:15px; color:var(--dim); margin:0 0 10px 4px; letter-spacing:1px;}
+  section h2{font-size:14px; color:var(--dim); margin:0 0 10px 4px; letter-spacing:1px;}
+  .hint-line{font-size:11px; color:var(--dim); margin:6px 4px 0; line-height:1.6;}
 
-  /* 白噪音 */
-  .sounds{display:flex; gap:10px;}
+  /* 白噪音混音器 */
+  .sounds{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;}
   .sound{
-    flex:1; background:var(--card); border-radius:var(--radius); border:2px solid transparent;
-    padding:14px 4px 12px; text-align:center; cursor:pointer; transition:all .2s;
+    background:var(--card); border-radius:14px; border:2px solid transparent;
+    padding:10px 6px 8px; text-align:center; cursor:pointer;
   }
-  .sound .icon{font-size:30px;}
-  .sound .name{font-size:14px; margin-top:6px; color:var(--text);}
-  .sound .state{font-size:11px; color:var(--dim); margin-top:3px;}
+  .sound .icon{font-size:26px;}
+  .sound .name{font-size:13px; margin-top:4px;}
+  .sound .state{font-size:10px; color:var(--dim); margin-top:2px;}
   .sound.playing{border-color:var(--accent); background:var(--card2);}
   .sound.playing .state{color:var(--accent);}
-  .vol-row{display:flex; align-items:center; gap:10px; margin-top:12px; padding:0 4px;}
-  .vol-row span{font-size:18px;}
-  input[type=range]{flex:1; accent-color:var(--accent); height:24px;}
+  .sound input[type=range]{width:100%; margin-top:6px; height:18px;}
+  input[type=range]{accent-color:var(--accent);}
+  .mix-master{
+    display:flex; align-items:center; gap:10px; margin-top:12px; padding:0 4px; font-size:13px; color:var(--dim);
+  }
+  .mix-master input[type=range]{flex:1;}
+  .sleep-row{
+    display:flex; align-items:center; gap:8px; margin-top:10px; padding:0 4px;
+    font-size:13px; color:var(--dim);
+  }
+  .sleep-row select{
+    padding:8px 10px; border-radius:10px; border:1px solid var(--line);
+    background:var(--card); color:var(--text); font-size:13px; font-family:inherit;
+  }
+  .fav-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center;}
+  .fav-chip{
+    background:var(--card2); border-radius:20px; padding:7px 12px; font-size:13px;
+    cursor:pointer; display:flex; align-items:center; gap:6px;
+  }
+  .fav-chip .del{color:var(--dim); font-size:12px; padding:0 2px;}
+  .fav-save{
+    background:none; border:1px dashed var(--line); color:var(--dim); border-radius:20px;
+    padding:7px 12px; font-size:13px; cursor:pointer; font-family:inherit;
+  }
+
+  /* 任務頁 */
+  .task-add{display:flex; gap:8px;}
+  .task-add input{
+    flex:1; padding:12px; border-radius:12px; border:1px solid var(--line);
+    background:var(--card); color:var(--text); font-size:15px; font-family:inherit;
+  }
+  .task-add button{
+    background:var(--accent); color:#fff; border:none; border-radius:12px;
+    padding:0 18px; font-size:15px; cursor:pointer; font-weight:bold; font-family:inherit;
+  }
+  .task-item{
+    background:var(--card); border-radius:14px; padding:12px 14px; margin-top:10px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .task-item.current{border:2px solid var(--accent);}
+  .task-item .pick{
+    width:20px; height:20px; border-radius:50%; border:2px solid var(--line);
+    flex-shrink:0; cursor:pointer;
+  }
+  .task-item.current .pick{border-color:var(--accent); background:var(--accent);}
+  .task-item .tname{flex:1; font-size:15px; word-break:break-all;}
+  .task-item.done-item .tname{text-decoration:line-through; color:var(--dim);}
+  .task-item .tcount{font-size:13px; color:var(--dim); white-space:nowrap;}
+  .task-item .tbtn{
+    background:var(--card2); border:none; color:var(--text); border-radius:10px;
+    padding:8px 10px; cursor:pointer; font-size:13px; font-family:inherit; flex-shrink:0;
+  }
+  .empty-note{color:var(--dim); font-size:13px; text-align:center; padding:20px 0; line-height:1.7;}
 
   /* 統計 */
   .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
   .stat{background:var(--card); border-radius:var(--radius); padding:12px 14px;}
-  .stat .num{font-size:24px; font-weight:bold;}
+  .stat .num{font-size:23px; font-weight:bold;}
   .stat .num small{font-size:13px; font-weight:normal; color:var(--dim);}
   .stat .label{font-size:12px; color:var(--dim); margin-top:2px;}
   .chart-card{background:var(--card); border-radius:var(--radius); padding:14px; margin-top:10px;}
-  .chart-title{font-size:12px; color:var(--dim); margin-bottom:8px;}
+  .chart-title{font-size:12px; color:var(--dim); margin-bottom:10px;}
+  .heat-scroll{overflow-x:auto; padding-bottom:4px;}
+  .heat-grid{display:grid; grid-auto-flow:column; grid-template-rows:repeat(7,12px); gap:3px; width:max-content;}
+  .heat-cell{width:12px; height:12px; border-radius:3px; background:var(--card2);}
+  .heat-1{background:#5c3648;} .heat-2{background:#94414f;} .heat-3{background:#cc5459;} .heat-4{background:#ff6b6b;}
+  .heat-legend{display:flex; align-items:center; gap:4px; margin-top:8px; font-size:10px; color:var(--dim); justify-content:flex-end;}
+  .heat-legend i{width:10px; height:10px; border-radius:2px; display:inline-block; background:var(--card2);}
   .chart{display:flex; align-items:flex-end; gap:3px; height:80px;}
-  .chart .bar{
-    flex:1; background:var(--card2); border-radius:3px 3px 0 0; min-height:3px;
-    position:relative;
-  }
+  .chart .bar{flex:1; background:var(--card2); border-radius:3px 3px 0 0; min-height:3px;}
   .chart .bar.has{background:var(--accent);}
   .chart-days{display:flex; gap:3px; margin-top:4px;}
   .chart-days div{flex:1; text-align:center; font-size:9px; color:var(--dim);}
+  .mood-sum{display:flex; gap:10px; margin-top:10px;}
+  .mood-sum .m{flex:1; background:var(--card); border-radius:14px; padding:10px; text-align:center;}
+  .mood-sum .m .f{font-size:22px;}
+  .mood-sum .m .c{font-size:14px; font-weight:bold; margin-top:2px;}
+  .mood-sum .m .l{font-size:10px; color:var(--dim);}
 
-  /* 設定 */
-  details{background:var(--card); border-radius:var(--radius); padding:0 16px;}
-  details summary{
-    padding:14px 0; cursor:pointer; font-weight:bold; font-size:15px; list-style:none;
-    display:flex; justify-content:space-between; align-items:center;
+  /* 健康頁 */
+  .h-card{background:var(--card); border-radius:var(--radius); padding:4px 16px; margin-bottom:12px;}
+  .h-row{
+    display:flex; align-items:center; gap:10px; padding:12px 0;
+    border-bottom:1px solid var(--line); font-size:14px;
   }
-  details summary::after{content:"▾"; color:var(--dim); transition:transform .2s;}
-  details[open] summary::after{transform:rotate(180deg);}
+  .h-card .h-row:last-child{border-bottom:none;}
+  .h-row .h-icon{font-size:20px; flex-shrink:0;}
+  .h-row .h-main{flex:1;}
+  .h-row .h-sub{font-size:11px; color:var(--dim); margin-top:2px;}
+  .h-row input[type=number]{
+    width:56px; padding:7px; border-radius:8px; border:1px solid var(--line);
+    background:var(--card2); color:var(--text); font-size:14px; text-align:center; font-family:inherit;
+  }
+  .h-row input[type=time]{
+    padding:6px 8px; border-radius:8px; border:1px solid var(--line);
+    background:var(--card2); color:var(--text); font-size:14px; font-family:inherit;
+  }
+  .h-unit{font-size:12px; color:var(--dim);}
+  .action-cards{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .action-card{
+    background:linear-gradient(135deg,#2c3a5e,#243c52); border:none; border-radius:var(--radius);
+    padding:18px 10px; text-align:center; cursor:pointer; color:var(--text); font-family:inherit;
+  }
+  .action-card .ai{font-size:30px;}
+  .action-card .an{font-size:15px; font-weight:bold; margin-top:6px;}
+  .action-card .ad{font-size:11px; color:var(--dim); margin-top:4px; line-height:1.5;}
+
+  /* 開關 */
+  .switch{position:relative; width:44px; height:25px; flex-shrink:0;}
+  .switch input{opacity:0; width:0; height:0;}
+  .switch .track{position:absolute; inset:0; background:var(--card2); border-radius:13px; transition:.2s; cursor:pointer; border:1px solid var(--line);}
+  .switch .track::before{content:""; position:absolute; width:18px; height:18px; border-radius:50%; background:#fff; top:3px; left:3px; transition:.2s;}
+  .switch input:checked + .track{background:var(--accent); border-color:var(--accent);}
+  .switch input:checked + .track::before{left:22px;}
+
+  /* 設定頁 */
+  .set-card{background:var(--card); border-radius:var(--radius); padding:4px 16px; margin-bottom:12px;}
   .set-row{
-    display:flex; justify-content:space-between; align-items:center;
-    padding:10px 0; border-top:1px solid #3a4060; font-size:14px;
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:12px 0; border-bottom:1px solid var(--line); font-size:14px;
   }
+  .set-card .set-row:last-child{border-bottom:none;}
   .set-row label{color:var(--text);}
   .set-row .hint{display:block; font-size:11px; color:var(--dim); margin-top:2px;}
   .set-row input[type=number]{
-    width:64px; padding:8px; border-radius:8px; border:1px solid #3a4060;
-    background:var(--card2); color:var(--text); font-size:15px; text-align:center;
+    width:62px; padding:8px; border-radius:8px; border:1px solid var(--line);
+    background:var(--card2); color:var(--text); font-size:15px; text-align:center; font-family:inherit;
   }
-  .switch{position:relative; width:46px; height:26px; flex-shrink:0;}
-  .switch input{opacity:0; width:0; height:0;}
-  .switch .track{
-    position:absolute; inset:0; background:var(--card2); border-radius:13px;
-    transition:.2s; cursor:pointer;
-  }
-  .switch .track::before{
-    content:""; position:absolute; width:20px; height:20px; border-radius:50%;
-    background:#fff; top:3px; left:3px; transition:.2s;
-  }
-  .switch input:checked + .track{background:var(--accent);}
-  .switch input:checked + .track::before{left:23px;}
-  details .pad-bottom{height:8px;}
+  details.help{background:var(--card); border-radius:var(--radius); padding:0 16px; margin-bottom:12px;}
+  details.help summary{padding:14px 0; cursor:pointer; font-weight:bold; font-size:14px; list-style:none; display:flex; justify-content:space-between;}
+  details.help summary::after{content:"▾"; color:var(--dim);}
+  details.help[open] summary::after{content:"▴";}
+  details.help .help-body{font-size:13px; color:var(--dim); line-height:1.9; padding:0 0 14px; border-top:1px solid var(--line); padding-top:10px;}
+  details.help .help-body b{color:var(--text);}
 
-  /* 備份 */
   .backup-btns{display:flex; gap:10px;}
   .backup-btns .btn{flex:1; background:var(--card); color:var(--text); font-size:15px;}
-  .backup-note{font-size:12px; color:var(--dim); margin-top:8px; line-height:1.6; padding:0 4px;}
+  .backup-note{font-size:12px; color:var(--dim); margin-top:8px; line-height:1.7; padding:0 4px;}
+
+  /* 全螢幕時鐘 */
+  #fsClock{
+    display:none; position:fixed; inset:0; background:var(--bg); z-index:200;
+    flex-direction:column; align-items:center; justify-content:center; cursor:pointer;
+  }
+  #fsClock.open{display:flex;}
+  #fsTime{font-size:24vw; font-weight:bold; font-variant-numeric:tabular-nums; line-height:1;}
+  #fsPhase{color:var(--dim); font-size:16px; margin-top:14px;}
+  #fsHint{color:var(--dim); font-size:12px; position:absolute; bottom:26px; opacity:.6;}
+
+  /* 覆蓋層(呼吸/伸展/心情) */
+  .overlay{
+    display:none; position:fixed; inset:0; background:rgba(15,17,30,.92); z-index:210;
+    flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center;
+  }
+  .overlay.open{display:flex;}
+  .overlay h3{font-size:20px; margin:0 0 6px;}
+  .overlay .ov-dim{color:var(--dim); font-size:13px;}
+  .ov-close{
+    margin-top:26px; background:var(--card2); color:var(--text); border:none;
+    border-radius:14px; padding:12px 34px; font-size:15px; cursor:pointer; font-family:inherit;
+  }
+  #breathCircle{
+    width:170px; height:170px; border-radius:50%; margin:26px 0 18px;
+    background:radial-gradient(circle,#5ea8ff55,#5ea8ff22); border:2px solid #5ea8ff;
+    transform:scale(.45); transition:transform 1s linear;
+  }
+  #breathPhase{font-size:22px; font-weight:bold;}
+  #breathCount{font-size:15px; color:var(--dim); margin-top:6px;}
+  #stretchEmoji{font-size:64px; margin:16px 0 8px;}
+  #stretchName{font-size:21px; font-weight:bold;}
+  #stretchDesc{font-size:14px; color:var(--dim); margin-top:8px; line-height:1.7; max-width:300px;}
+  #stretchSec{font-size:44px; font-weight:bold; margin-top:14px; font-variant-numeric:tabular-nums;}
+  .mood-btns{display:flex; gap:14px; margin-top:20px;}
+  .mood-btns button{
+    background:var(--card); border:none; border-radius:16px; padding:14px 18px;
+    cursor:pointer; font-family:inherit; color:var(--text);
+  }
+  .mood-btns button .mf{font-size:32px;}
+  .mood-btns button .ml{font-size:12px; color:var(--dim); margin-top:4px;}
+
+  /* 提醒橫幅 */
+  #remBanner{
+    position:fixed; top:-120px; left:50%; transform:translateX(-50%); z-index:220;
+    background:#2c3a5e; border:1px solid var(--line); border-radius:16px;
+    padding:14px 16px; width:calc(100% - 32px); max-width:440px;
+    display:flex; align-items:center; gap:12px; transition:top .4s;
+    box-shadow:0 6px 24px rgba(0,0,0,.5);
+  }
+  #remBanner.show{top:14px;}
+  #remBanner .ri{font-size:26px;}
+  #remBanner .rt{flex:1; font-size:14px; line-height:1.5;}
+  #remBanner button{
+    background:var(--card2); border:none; color:var(--text); border-radius:10px;
+    padding:9px 14px; font-size:13px; cursor:pointer; font-family:inherit; flex-shrink:0;
+  }
 
   #toast{
-    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
+    position:fixed; bottom:86px; left:50%; transform:translateX(-50%) translateY(80px);
     background:#3a4060; color:#fff; padding:12px 20px; border-radius:12px;
-    font-size:14px; opacity:0; transition:all .3s; z-index:99; max-width:90%;
+    font-size:14px; opacity:0; transition:all .3s; z-index:230; max-width:90%;
     box-shadow:0 4px 20px rgba(0,0,0,.4); text-align:center;
   }
   #toast.show{transform:translateX(-50%) translateY(0); opacity:1;}
-  footer{margin-top:24px; font-size:11px; color:var(--dim); text-align:center; line-height:1.7;}
+  footer{margin-top:22px; font-size:11px; color:var(--dim); text-align:center; line-height:1.7;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header><h1>🍅 番茄專注鐘</h1></header>
 
-  <div class="modes">
-    <button id="tabFocus" onclick="switchMode('focus',true)">專注</button>
-    <button id="tabShort" onclick="switchMode('short',true)">短休息</button>
-    <button id="tabLong" onclick="switchMode('long',true)">長休息</button>
+  <!-- ===== 計時分頁 ===== -->
+  <div class="tab-page active" id="page-timer">
+    <div id="quoteBar"></div>
+
+    <div class="presets">
+      <button onclick="applyPreset(0)">💼 工作<small>25 分+雨聲</small></button>
+      <button onclick="applyPreset(1)">📚 讀書<small>50 分+咖啡廳</small></button>
+      <button onclick="applyPreset(2)">🌿 放鬆<small>10 分+海浪</small></button>
+    </div>
+
+    <div class="modes">
+      <button id="tabFocus" onclick="switchMode('focus',true)">專注</button>
+      <button id="tabShort" onclick="switchMode('short',true)">短休息</button>
+      <button id="tabLong" onclick="switchMode('long',true)">長休息</button>
+    </div>
+
+    <div class="timer-card" id="timerCard">
+      <div id="phaseLabel">準備開始專注</div>
+      <div id="time">25:00</div>
+      <div id="roundLabel"></div>
+      <div class="timer-btns">
+        <button class="btn sub" onclick="resetTimer()">重設</button>
+        <button class="btn" id="startBtn" onclick="toggleTimer()">開始</button>
+        <button class="btn sub" id="skipBtn" onclick="skipPhase()">跳過</button>
+        <button class="btn sub" id="doneBtn" onclick="finishCountUp()" style="display:none">完成</button>
+      </div>
+      <div class="timer-tools">
+        <div class="left">
+          <div class="switch"><input type="checkbox" id="cuToggle" onchange="toggleCountUpSetting(this)"><div class="track" onclick="document.getElementById('cuToggle').click()"></div></div>
+          <span>正計時模式(做多久算多久)</span>
+        </div>
+        <button class="fs-btn" onclick="openFsClock()">⛶ 全螢幕</button>
+      </div>
+    </div>
+
+    <div id="microCard"></div>
+
+    <div class="task-row">
+      <select id="taskSelect" onchange="pickTask(this.value)"></select>
+    </div>
+
+    <section>
+      <h2>🎧 白噪音混音器(可同時開好幾種、各自調音量)</h2>
+      <div class="sounds" id="soundGrid"></div>
+      <div class="mix-master">
+        <span>總音量</span>
+        <input type="range" id="volSlider" min="0" max="100" value="60" oninput="setVolume(this.value)">
+      </div>
+      <div class="sleep-row">
+        <span>😴 睡眠定時</span>
+        <select id="sleepSelect" onchange="setSleepTimer(this.value)">
+          <option value="0">關閉</option>
+          <option value="15">15 分鐘後停止</option>
+          <option value="30">30 分鐘後停止</option>
+          <option value="45">45 分鐘後停止</option>
+          <option value="60">60 分鐘後停止</option>
+        </select>
+        <span id="sleepLeft"></span>
+      </div>
+      <div class="fav-row" id="favRow"></div>
+      <div class="hint-line">💡 試試「雨聲+遠雷」像下雨的夜晚,「咖啡廳+火堆」像溫暖的小店。調好按「存目前組合」隨時一鍵切回。</div>
+    </section>
   </div>
 
-  <div class="timer-card" id="timerCard">
-    <div id="phaseLabel">準備開始專注</div>
-    <div id="time">25:00</div>
-    <div id="roundLabel"></div>
-    <div class="timer-btns">
-      <button class="btn sub" onclick="resetTimer()">重設</button>
-      <button class="btn" id="startBtn" onclick="toggleTimer()">開始</button>
-      <button class="btn sub" onclick="skipPhase()">跳過</button>
-    </div>
+  <!-- ===== 任務分頁 ===== -->
+  <div class="tab-page" id="page-tasks">
+    <section style="margin-top:6px">
+      <h2>✅ 任務清單(開始前選一個,完成的番茄會記在它身上)</h2>
+      <div class="task-add">
+        <input type="text" id="taskInput" placeholder="輸入要做的事,例如:讀多益單字" maxlength="50" onkeydown="if(event.key==='Enter')addTask()">
+        <button onclick="addTask()">新增</button>
+      </div>
+      <div id="taskList"></div>
+    </section>
+    <section>
+      <h2>🎉 已完成</h2>
+      <div id="doneList"></div>
+    </section>
   </div>
 
-  <section>
-    <h2>🎧 白噪音(點一下播放,再點一下停止)</h2>
-    <div class="sounds">
-      <div class="sound" id="snd-rain" onclick="toggleSound('rain')">
-        <div class="icon">🌧️</div><div class="name">雨聲</div><div class="state">停止中</div>
+  <!-- ===== 統計分頁 ===== -->
+  <div class="tab-page" id="page-stats">
+    <section style="margin-top:6px">
+      <h2>📊 專注統計</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="num" id="statToday">0 <small>顆</small></div><div class="label">今日番茄(<span id="statTodayMin">0</span> 分鐘)</div></div>
+        <div class="stat"><div class="num" id="statWeek">0 <small>分鐘</small></div><div class="label">最近 7 天專注</div></div>
+        <div class="stat"><div class="num" id="statTotal">0 <small>顆</small></div><div class="label">累計番茄</div></div>
+        <div class="stat"><div class="num" id="statStreak">0 <small>天</small></div><div class="label">連續專注天數</div></div>
       </div>
-      <div class="sound" id="snd-ocean" onclick="toggleSound('ocean')">
-        <div class="icon">🌊</div><div class="name">海浪</div><div class="state">停止中</div>
+      <div class="chart-card">
+        <div class="chart-title">🟥 專注熱力圖(最近 20 週,越紅代表那天專注越久)</div>
+        <div class="heat-scroll"><div class="heat-grid" id="heatGrid"></div></div>
+        <div class="heat-legend">少 <i></i><i class="heat-1"></i><i class="heat-2"></i><i class="heat-3"></i><i class="heat-4"></i> 多</div>
       </div>
-      <div class="sound" id="snd-cafe" onclick="toggleSound('cafe')">
-        <div class="icon">☕</div><div class="name">咖啡廳</div><div class="state">停止中</div>
+      <div class="chart-card">
+        <div class="chart-title">最近 14 天每日專注分鐘數</div>
+        <div class="chart" id="chart"></div>
+        <div class="chart-days" id="chartDays"></div>
       </div>
-    </div>
-    <div class="vol-row">
-      <span>🔉</span>
-      <input type="range" id="volSlider" min="0" max="100" value="60" oninput="setVolume(this.value)">
-      <span>🔊</span>
-    </div>
-  </section>
+      <div class="mood-sum" id="moodSum"></div>
+    </section>
+  </div>
 
-  <section>
-    <h2>📊 專注統計</h2>
-    <div class="stat-grid">
-      <div class="stat"><div class="num" id="statToday">0 <small>顆</small></div><div class="label">今日番茄(<span id="statTodayMin">0</span> 分鐘)</div></div>
-      <div class="stat"><div class="num" id="statWeek">0 <small>分鐘</small></div><div class="label">最近 7 天專注</div></div>
-      <div class="stat"><div class="num" id="statTotal">0 <small>顆</small></div><div class="label">累計番茄</div></div>
-      <div class="stat"><div class="num" id="statStreak">0 <small>天</small></div><div class="label">連續專注天數</div></div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">最近 14 天每日專注分鐘數</div>
-      <div class="chart" id="chart"></div>
-      <div class="chart-days" id="chartDays"></div>
-    </div>
-  </section>
-
-  <section>
-    <details>
-      <summary>⚙️ 設定</summary>
-      <div class="set-row"><label>專注時長(分鐘)</label><input type="number" id="setWork" min="1" max="120" onchange="saveSettings()"></div>
-      <div class="set-row"><label>短休息(分鐘)</label><input type="number" id="setShort" min="1" max="60" onchange="saveSettings()"></div>
-      <div class="set-row"><label>長休息(分鐘)</label><input type="number" id="setLong" min="1" max="90" onchange="saveSettings()"></div>
-      <div class="set-row"><label>每幾輪進入長休息</label><input type="number" id="setEvery" min="2" max="10" onchange="saveSettings()"></div>
-      <div class="set-row">
-        <label>休息結束自動開始專注</label>
-        <div class="switch"><input type="checkbox" id="setAutoWork" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoWork').click()"></div></div>
+  <!-- ===== 健康分頁 ===== -->
+  <div class="tab-page" id="page-health">
+    <section style="margin-top:6px">
+      <h2>💚 健康提醒(網頁開著時才會提醒)</h2>
+      <div class="h-card">
+        <div class="h-row">
+          <span class="h-icon">💧</span>
+          <div class="h-main">喝水提醒<div class="h-sub">定時提醒你補充水分</div></div>
+          <input type="number" id="hWaterMin" min="10" max="240" onchange="saveHealth()"><span class="h-unit">分</span>
+          <div class="switch"><input type="checkbox" id="hWaterOn" onchange="saveHealth()"><div class="track" onclick="document.getElementById('hWaterOn').click()"></div></div>
+        </div>
+        <div class="h-row">
+          <span class="h-icon">🧍</span>
+          <div class="h-main">久坐提醒<div class="h-sub">站起來動一動、伸展一下</div></div>
+          <input type="number" id="hSitMin" min="10" max="240" onchange="saveHealth()"><span class="h-unit">分</span>
+          <div class="switch"><input type="checkbox" id="hSitOn" onchange="saveHealth()"><div class="track" onclick="document.getElementById('hSitOn').click()"></div></div>
+        </div>
+        <div class="h-row">
+          <span class="h-icon">👀</span>
+          <div class="h-main">20-20-20 護眼<div class="h-sub">看遠方 20 秒+多眨眼</div></div>
+          <input type="number" id="hEyeMin" min="10" max="120" onchange="saveHealth()"><span class="h-unit">分</span>
+          <div class="switch"><input type="checkbox" id="hEyeOn" onchange="saveHealth()"><div class="track" onclick="document.getElementById('hEyeOn').click()"></div></div>
+        </div>
+        <div class="h-row">
+          <span class="h-icon">🔄</span>
+          <div class="h-main">坐站交替<div class="h-sub">有站立桌的話,定時換姿勢</div></div>
+          <input type="number" id="hStandMin" min="15" max="240" onchange="saveHealth()"><span class="h-unit">分</span>
+          <div class="switch"><input type="checkbox" id="hStandOn" onchange="saveHealth()"><div class="track" onclick="document.getElementById('hStandOn').click()"></div></div>
+        </div>
+        <div class="h-row">
+          <span class="h-icon">☕</span>
+          <div class="h-main">咖啡因截止<div class="h-sub">過了這個時間提醒別再喝咖啡</div></div>
+          <input type="time" id="hCafTime" onchange="saveHealth()">
+          <div class="switch"><input type="checkbox" id="hCafOn" onchange="saveHealth()"><div class="track" onclick="document.getElementById('hCafOn').click()"></div></div>
+        </div>
+        <div class="h-row">
+          <span class="h-icon">🌙</span>
+          <div class="h-main">就寢提醒<div class="h-sub">到時間提醒收尾,別熬夜</div></div>
+          <input type="time" id="hBedTime" onchange="saveHealth()">
+          <div class="switch"><input type="checkbox" id="hBedOn" onchange="saveHealth()"><div class="track" onclick="document.getElementById('hBedOn').click()"></div></div>
+        </div>
       </div>
-      <div class="set-row">
-        <label>專注結束自動開始休息</label>
-        <div class="switch"><input type="checkbox" id="setAutoBreak" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoBreak').click()"></div></div>
+    </section>
+    <section>
+      <h2>🧘 放鬆練習</h2>
+      <div class="action-cards">
+        <button class="action-card" onclick="openBreath()">
+          <div class="ai">🫁</div><div class="an">呼吸練習</div>
+          <div class="ad">4-7-8 呼吸法<br>跟著圓圈吸氣吐氣</div>
+        </button>
+        <button class="action-card" onclick="openStretch()">
+          <div class="ai">🤸</div><div class="an">頸肩手腕伸展</div>
+          <div class="ad">8 個動作跟著做<br>約 2 分鐘</div>
+        </button>
       </div>
-      <div class="set-row">
-        <label>計時中螢幕保持常亮<span class="hint">避免手機自動熄滅螢幕讓計時中斷</span></label>
-        <div class="switch"><input type="checkbox" id="setWake" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setWake').click()"></div></div>
+    </section>
+  </div>
+
+  <!-- ===== 設定分頁 ===== -->
+  <div class="tab-page" id="page-settings">
+    <section style="margin-top:6px">
+      <h2>⚙️ 番茄鐘設定</h2>
+      <div class="set-card">
+        <div class="set-row"><label>專注時長(分鐘)</label><input type="number" id="setWork" min="1" max="120" onchange="saveSettings()"></div>
+        <div class="set-row"><label>短休息(分鐘)</label><input type="number" id="setShort" min="1" max="60" onchange="saveSettings()"></div>
+        <div class="set-row"><label>長休息(分鐘)</label><input type="number" id="setLong" min="1" max="90" onchange="saveSettings()"></div>
+        <div class="set-row"><label>每幾輪進入長休息</label><input type="number" id="setEvery" min="2" max="10" onchange="saveSettings()"></div>
+        <div class="set-row"><label>休息結束自動開始專注</label>
+          <div class="switch"><input type="checkbox" id="setAutoWork" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoWork').click()"></div></div></div>
+        <div class="set-row"><label>專注結束自動開始休息</label>
+          <div class="switch"><input type="checkbox" id="setAutoBreak" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoBreak').click()"></div></div></div>
+        <div class="set-row"><label>計時中螢幕保持常亮<span class="hint">避免手機自動熄滅螢幕讓計時中斷</span></label>
+          <div class="switch"><input type="checkbox" id="setWake" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setWake').click()"></div></div></div>
       </div>
-      <div class="pad-bottom"></div>
-    </details>
-  </section>
-
-  <section>
-    <h2>💾 備份</h2>
-    <div class="backup-btns">
-      <button class="btn" onclick="exportBackup()">📤 匯出備份</button>
-      <button class="btn" onclick="document.getElementById('importFile').click()">📥 匯入備份</button>
-    </div>
-    <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importBackup(this)">
-    <div class="backup-note">
-      📤 匯出:把你的設定和專注紀錄存成一個檔案,收在安全的地方。<br>
-      📥 匯入:用之前匯出的檔案還原紀錄。<b>匯入會覆蓋目前的紀錄</b>,按下去之前會再跟你確認一次。
-    </div>
-  </section>
-
-  <footer>離線可用 · 資料只存在你自己的裝置裡<br>建議定期「匯出備份」保存專注紀錄</footer>
+    </section>
+    <section>
+      <h2>✨ 小功能開關</h2>
+      <div class="set-card">
+        <div class="set-row"><label>休息時顯示微運動建議</label>
+          <div class="switch"><input type="checkbox" id="setMicro" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setMicro').click()"></div></div></div>
+        <div class="set-row"><label>專注結束後記錄專注度<span class="hint">按一下這輪狀態如何,統計頁看得到</span></label>
+          <div class="switch"><input type="checkbox" id="setMood" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setMood').click()"></div></div></div>
+        <div class="set-row"><label>顯示每日一句</label>
+          <div class="switch"><input type="checkbox" id="setQuote" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setQuote').click()"></div></div></div>
+      </div>
+    </section>
+    <section>
+      <h2>❓ 使用說明</h2>
+      <details class="help">
+        <summary>🍅 番茄鐘是什麼?怎麼用?</summary>
+        <div class="help-body">
+          <b>番茄工作法</b>是把時間切成一段一段:<b>專注 25 分鐘 → 休息 5 分鐘</b>,這樣算完成「一顆番茄」;每滿 4 顆,換一次比較長的休息(15 分鐘)。<br><br>
+          為什麼有效?因為「只要專注 25 分鐘就好」讓大腦更容易開始,而固定的休息避免疲勞越積越多,反而能撐得更久。<br><br>
+          <b>怎麼用:</b><br>
+          1. (可選)先到「任務」頁新增要做的事,回來選好這一輪要做什麼。<br>
+          2. 按「開始」專心做事,時間到會響鈴自動進入休息。<br>
+          3. 休息完再按開始,進入下一輪。<br><br>
+          <b>按鈕說明:</b>「跳過」= 放棄這一輪不計入統計;「重設」= 這一輪重新來過;<b>「正計時模式」</b>= 不想被倒數壓迫時打開,改成做多久記多久,結束時按「完成」記錄。<br><br>
+          上方三顆<b>情境按鈕</b>(工作/讀書/放鬆)會一鍵幫你調好時長和背景音,不用每次設定。
+        </div>
+      </details>
+      <details class="help">
+        <summary>🎧 白噪音有什麼用?</summary>
+        <div class="help-body">
+          白噪音是一種<b>穩定、沒有變化的背景聲音</b>,用途:<br><br>
+          1. <b>蓋過環境雜音</b>——別人講話聲、車聲、施工聲,突然的聲音最容易打斷專注,白噪音能把它們「蓋掉」。<br>
+          2. <b>幫大腦進入狀態</b>——固定聽同一種聲音工作,久了大腦聽到就知道「該專心了」。<br>
+          3. <b>助眠</b>——睡前開著海浪或雨聲,搭配「睡眠定時」設 30 分鐘,聲音會慢慢變小自動停止。<br><br>
+          <b>混音器用法:</b>每種聲音點一下開、再點一下關,可以同時開好幾種、各自調音量,疊出自己喜歡的氛圍,再按「存目前組合」收藏起來。<br><br>
+          所有聲音都是程式即時合成的,完全離線、不佔空間。
+        </div>
+      </details>
+      <details class="help">
+        <summary>📌 注意事項</summary>
+        <div class="help-body">
+          1. 健康提醒和計時<b>要在網頁開著的時候</b>才會運作,建議搭配「螢幕保持常亮」使用。<br>
+          2. 手機可以用瀏覽器的「加入主畫面」把它變成 App。<br>
+          3. 所有紀錄只存在你這台裝置上,<b>換裝置或清瀏覽器資料前,記得先「匯出備份」</b>。
+        </div>
+      </details>
+    </section>
+    <section>
+      <h2>💾 備份</h2>
+      <div class="backup-btns">
+        <button class="btn" onclick="exportBackup()">📤 匯出備份</button>
+        <button class="btn" onclick="document.getElementById('importFile').click()">📥 匯入備份</button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importBackup(this)">
+      <div class="backup-note">
+        📤 匯出:把設定、專注紀錄、任務、常用音效組合存成一個檔案,收在安全的地方。<br>
+        📥 匯入:用之前匯出的檔案還原。<b>匯入會覆蓋目前的紀錄</b>,按下去之前會再跟你確認一次。
+      </div>
+    </section>
+    <footer>離線可用 · 資料只存在你自己的裝置裡<br>建議定期「匯出備份」保存專注紀錄</footer>
+  </div>
 </div>
+
+<!-- 底部分頁列 -->
+<nav class="bottom-nav">
+  <button id="nav-timer" class="active" onclick="showPage('timer')"><span class="ni">🍅</span>計時</button>
+  <button id="nav-tasks" onclick="showPage('tasks')"><span class="ni">✅</span>任務</button>
+  <button id="nav-stats" onclick="showPage('stats')"><span class="ni">📊</span>統計</button>
+  <button id="nav-health" onclick="showPage('health')"><span class="ni">💚</span>健康</button>
+  <button id="nav-settings" onclick="showPage('settings')"><span class="ni">⚙️</span>設定</button>
+</nav>
+
+<!-- 全螢幕時鐘 -->
+<div id="fsClock" onclick="closeFsClock()">
+  <div id="fsTime">25:00</div>
+  <div id="fsPhase">專注</div>
+  <div id="fsHint">點一下畫面離開全螢幕</div>
+</div>
+
+<!-- 呼吸練習 -->
+<div class="overlay" id="breathOv">
+  <h3>🫁 4-7-8 呼吸練習</h3>
+  <div class="ov-dim">跟著圓圈:吸氣 4 秒 → 屏息 7 秒 → 吐氣 8 秒</div>
+  <div id="breathCircle"></div>
+  <div id="breathPhase">準備…</div>
+  <div id="breathCount"></div>
+  <button class="ov-close" onclick="closeBreath()">結束</button>
+</div>
+
+<!-- 伸展引導 -->
+<div class="overlay" id="stretchOv">
+  <h3>🤸 頸肩手腕伸展</h3>
+  <div class="ov-dim" id="stretchStep"></div>
+  <div id="stretchEmoji"></div>
+  <div id="stretchName"></div>
+  <div id="stretchDesc"></div>
+  <div id="stretchSec"></div>
+  <div style="display:flex; gap:12px; margin-top:26px;">
+    <button class="ov-close" style="margin-top:0" onclick="stretchNext()">下一步 ➜</button>
+    <button class="ov-close" style="margin-top:0" onclick="closeStretch()">結束</button>
+  </div>
+</div>
+
+<!-- 心情記錄 -->
+<div class="overlay" id="moodOv">
+  <h3>這一輪的專注度如何?</h3>
+  <div class="ov-dim">累積下來可以看出你什麼時候最有效率</div>
+  <div class="mood-btns">
+    <button onclick="recordMood(2)"><div class="mf">😃</div><div class="ml">很專注</div></button>
+    <button onclick="recordMood(1)"><div class="mf">🙂</div><div class="ml">普通</div></button>
+    <button onclick="recordMood(0)"><div class="mf">😵</div><div class="ml">分心了</div></button>
+  </div>
+  <button class="ov-close" onclick="closeMood()">跳過不記</button>
+</div>
+
+<!-- 健康提醒橫幅 -->
+<div id="remBanner">
+  <span class="ri" id="remIcon">💧</span>
+  <span class="rt" id="remText"></span>
+  <button onclick="hideRem()">知道了</button>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -245,82 +645,163 @@ function todayStr(offset=0){
 let toastTimer=null;
 function toast(msg){
   const t=$("toast"); t.textContent=msg; t.classList.add("show");
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2600);
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2800);
+}
+function fmtMs(ms){
+  const total=Math.max(0,Math.round(ms/1000));
+  const h=Math.floor(total/3600), m=Math.floor(total%3600/60), s=total%60;
+  return h>0 ? h+":"+String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")
+             : String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
 }
 
-/* ============ 資料存取 ============ */
-const DEFAULT_SETTINGS = {work:25, short:5, long:15, longEvery:4, autoStartWork:false, autoStartBreak:false, wakeLock:true, volume:60};
-let settings = {...DEFAULT_SETTINGS};
-let sessions = [];   // 完成的專注紀錄 [{d:"2026-07-10", m:25}]
+/* ============ 資料 ============ */
+const DEFAULT_SETTINGS = {
+  work:25, short:5, long:15, longEvery:4,
+  autoStartWork:false, autoStartBreak:false, wakeLock:true, volume:60,
+  countUp:false, moodLog:true, microEx:true, dailyQuote:true,
+  health:{
+    water:{on:false,min:45}, sit:{on:false,min:50}, eye:{on:false,min:20},
+    stand:{on:false,min:60}, caffeine:{on:false,time:"14:00"}, bed:{on:false,time:"23:00"}
+  }
+};
+let settings={}, sessions=[], tasks=[], activeTask=null, favMixes=[];
 function load(){
-  try{ settings = {...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem("pomo_settings")||"{}")}; }catch(e){}
-  try{ sessions = JSON.parse(localStorage.getItem("pomo_sessions")||"[]"); }catch(e){ sessions=[]; }
+  let s={};
+  try{ s=JSON.parse(localStorage.getItem("pomo_settings")||"{}")||{}; }catch(e){}
+  settings={...DEFAULT_SETTINGS, ...s, health:{}};
+  for(const k in DEFAULT_SETTINGS.health)
+    settings.health[k]={...DEFAULT_SETTINGS.health[k], ...((s.health&&s.health[k])||{})};
+  try{ sessions=JSON.parse(localStorage.getItem("pomo_sessions")||"[]"); }catch(e){ sessions=[]; }
   if(!Array.isArray(sessions)) sessions=[];
+  try{ tasks=JSON.parse(localStorage.getItem("pomo_tasks")||"[]"); }catch(e){ tasks=[]; }
+  if(!Array.isArray(tasks)) tasks=[];
+  activeTask=localStorage.getItem("pomo_activeTask")||null;
+  try{ favMixes=JSON.parse(localStorage.getItem("pomo_favmixes")||"[]"); }catch(e){ favMixes=[]; }
+  if(!Array.isArray(favMixes)) favMixes=[];
+  try{
+    const mv=JSON.parse(localStorage.getItem("pomo_mixvol")||"{}");
+    for(const k in mv) if(SOUND_DEFS[k]) mixVol[k]=mv[k];
+  }catch(e){}
 }
 function saveData(){
   localStorage.setItem("pomo_settings", JSON.stringify(settings));
   localStorage.setItem("pomo_sessions", JSON.stringify(sessions));
+  localStorage.setItem("pomo_tasks", JSON.stringify(tasks));
+  if(activeTask) localStorage.setItem("pomo_activeTask", activeTask);
+  else localStorage.removeItem("pomo_activeTask");
+  localStorage.setItem("pomo_favmixes", JSON.stringify(favMixes));
+  localStorage.setItem("pomo_mixvol", JSON.stringify(mixVol));
+}
+
+/* ============ 分頁切換 ============ */
+function showPage(name){
+  document.querySelectorAll(".tab-page").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".bottom-nav button").forEach(b=>b.classList.remove("active"));
+  $("page-"+name).classList.add("active");
+  $("nav-"+name).classList.add("active");
+  if(name==="stats") renderStats();
+}
+
+/* ============ 每日一句 ============ */
+const QUOTES=[
+  "專注是最稀缺的資源,今天也好好守住它。","不必很厲害才能開始,要開始才會很厲害。",
+  "一次一顆番茄,一步一個腳印。","現在的 25 分鐘,是未來的你最感謝的禮物。",
+  "完成,比完美更重要。","你不需要動力,你需要開始。",
+  "小小的累積,終將變成大大的不同。","把手機放遠一點,把目標拉近一點。",
+  "疲憊時休息,而不是放棄。","今天的努力,是明天的底氣。",
+  "別想著整座山,先走好眼前這一步。","專注當下,時間自然站在你這邊。",
+  "每一輪專注,都是給自己的投資。","慢慢來,比較快。",
+  "行動會帶來靈感,而不是相反。","你已經打開了 App,最難的一步完成了。",
+  "與其焦慮,不如先專注 25 分鐘。","持續,是最被低估的天賦。",
+  "休息,也是前進的一部分。","做重要的事,而不是只做緊急的事。"
+];
+function renderQuote(){
+  const bar=$("quoteBar");
+  if(!settings.dailyQuote){ bar.style.display="none"; return; }
+  bar.style.display="block";
+  const idx=Math.floor(Date.now()/86400000)%QUOTES.length;
+  bar.textContent="「"+QUOTES[idx]+"」";
 }
 
 /* ============ 番茄鐘 ============ */
-let mode = "focus";          // focus | short | long
-let running = false;
-let endAt = 0;               // 結束時間點(毫秒)
-let remainMs = 0;            // 暫停時剩下的毫秒
-let roundCount = parseInt(localStorage.getItem("pomo_rounds")||"0",10) || 0; // 累計完成幾輪專注(用來排長休息)
-let tickTimer = null;
+let mode="focus", running=false, endAt=0, remainMs=0;
+let cuActive=false, cuStart=0, cuAccum=0;  // 正計時
+let roundCount=parseInt(localStorage.getItem("pomo_rounds")||"0",10)||0;
+let tickTimer=null;
 
 function modeMinutes(m){ return m==="focus"?settings.work : m==="short"?settings.short : settings.long; }
 function modeName(m){ return m==="focus"?"專注" : m==="short"?"短休息" : "長休息"; }
 function modeColor(m){ return m==="focus"?"var(--focus)" : m==="short"?"var(--short)" : "var(--long)"; }
+function isCountUpFocus(){ return mode==="focus" && settings.countUp; }
 
 function switchMode(m, manual){
   if(manual && running){
     if(!confirm("計時進行中,確定要切換到「"+modeName(m)+"」嗎?目前這一輪會取消不計入。")) return;
   }
-  stopTick();
-  running=false; mode=m;
-  remainMs = modeMinutes(m)*60000;
+  stopTick(); running=false; mode=m;
+  cuActive=false; cuAccum=0;
+  remainMs=modeMinutes(m)*60000;
   document.documentElement.style.setProperty("--accent", modeColor(m));
   ["tabFocus","tabShort","tabLong"].forEach(id=>$(id).classList.remove("active"));
   $(m==="focus"?"tabFocus":m==="short"?"tabShort":"tabLong").classList.add("active");
   $("phaseLabel").textContent = m==="focus" ? "準備開始專注" : "休息一下吧";
+  if(m==="focus") $("microCard").style.display="none";
   updateDisplay(); updateButtons(); saveTimerState(); releaseWake();
 }
 
 function toggleTimer(){
-  ensureAudioCtx(); // 順便解鎖聲音(瀏覽器規定要使用者按過按鈕才能出聲)
-  if(running){ // 暫停
-    remainMs = Math.max(0, endAt - Date.now());
-    running=false; stopTick(); releaseWake();
-  }else{ // 開始
-    if(remainMs<=0) remainMs = modeMinutes(mode)*60000;
-    endAt = Date.now() + remainMs;
-    running=true; startTick(); requestWake();
-    $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
+  ensureAudioCtx();
+  if(isCountUpFocus()){
+    if(running){ cuAccum+=Date.now()-cuStart; running=false; stopTick(); releaseWake(); }
+    else{
+      if(!cuActive){ cuActive=true; cuAccum=0; }
+      cuStart=Date.now(); running=true; startTick(); requestWake();
+      $("phaseLabel").textContent="專注中(正計時)…加油!";
+    }
+  }else{
+    if(running){
+      remainMs=Math.max(0,endAt-Date.now());
+      running=false; stopTick(); releaseWake();
+    }else{
+      if(remainMs<=0) remainMs=modeMinutes(mode)*60000;
+      endAt=Date.now()+remainMs;
+      running=true; startTick(); requestWake();
+      $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
+    }
   }
   updateButtons(); updateDisplay(); saveTimerState();
 }
 
 function resetTimer(){
   stopTick(); running=false;
-  remainMs = modeMinutes(mode)*60000;
+  cuActive=false; cuAccum=0;
+  remainMs=modeMinutes(mode)*60000;
   $("phaseLabel").textContent = mode==="focus" ? "準備開始專注" : "休息一下吧";
   updateDisplay(); updateButtons(); saveTimerState(); releaseWake();
 }
 
 function skipPhase(){
-  if(mode==="focus" && running){
+  if(mode==="focus" && (running||cuActive)){
     if(!confirm("跳過的話,這一輪專注不會計入統計,確定嗎?")) return;
   }
-  advance(false);
+  advance(false,0);
+}
+
+function finishCountUp(){
+  const elapsed=cuAccum+(running?Date.now()-cuStart:0);
+  if(elapsed<60000){
+    if(confirm("這一輪還不到 1 分鐘,不會計入統計。要直接重新開始嗎?")) resetTimer();
+    return;
+  }
+  advance(true, Math.round(elapsed/60000));
 }
 
 function startTick(){ stopTick(); tickTimer=setInterval(tick,250); }
 function stopTick(){ if(tickTimer){clearInterval(tickTimer); tickTimer=null;} }
 
 function tick(){
-  const left = endAt - Date.now();
+  if(isCountUpFocus()){ updateDisplay(); return; }
+  const left=endAt-Date.now();
   if(left<=0){ finishPhase(); return; }
   remainMs=left; updateDisplay();
 }
@@ -329,23 +810,28 @@ function finishPhase(){
   stopTick(); running=false; remainMs=0; releaseWake();
   playChime(mode==="focus");
   if(navigator.vibrate) navigator.vibrate([200,100,200]);
-  advance(true);
+  advance(true, mode==="focus"?settings.work:0);
 }
 
-// completed=true 代表時間自然走完;false 代表使用者按跳過
-function advance(completed){
+// completed=時間走完或按「完成」;minutes=要記錄的專注分鐘數
+function advance(completed, minutes){
   stopTick(); running=false; releaseWake();
   if(mode==="focus"){
-    if(completed){
+    if(completed && minutes>0){
       roundCount++;
       localStorage.setItem("pomo_rounds", String(roundCount));
-      sessions.push({d:todayStr(), m:settings.work});
+      const rec={d:todayStr(), m:minutes};
+      const t=tasks.find(x=>x.id===activeTask && !x.done);
+      if(t){ t.pomos=(t.pomos||0)+1; rec.task=t.id; renderTasks(); }
+      sessions.push(rec);
       saveData(); renderStats();
-      toast("🍅 完成一輪專注!休息一下吧");
+      toast("🍅 完成一輪專注("+minutes+" 分鐘)!休息一下吧");
+      if(settings.microEx) showMicro();
+      if(settings.moodLog) $("moodOv").classList.add("open");
     }
-    const nextMode = (roundCount>0 && roundCount % settings.longEvery===0) ? "long" : "short";
+    const nextMode=(roundCount>0 && roundCount%settings.longEvery===0)?"long":"short";
     switchMode(nextMode,false);
-    if(completed && settings.autoStartBreak) toggleTimer();
+    if(completed && minutes>0 && settings.autoStartBreak) toggleTimer();
   }else{
     if(completed) toast("休息結束,回來繼續囉");
     switchMode("focus",false);
@@ -354,57 +840,89 @@ function advance(completed){
 }
 
 function updateDisplay(){
-  const total = Math.max(0, Math.round(remainMs/1000));
-  const mm=String(Math.floor(total/60)).padStart(2,"0"), ss=String(total%60).padStart(2,"0");
-  $("time").textContent = mm+":"+ss;
-  const inCycle = roundCount % settings.longEvery;
-  $("roundLabel").textContent = "本循環第 "+(mode==="focus"? inCycle+1 : (inCycle===0? settings.longEvery : inCycle))+" 輪 / 每 "+settings.longEvery+" 輪長休息一次";
-  document.title = running ? (mm+":"+ss+" · "+modeName(mode)+" - 番茄專注鐘") : "番茄專注鐘";
+  let txt;
+  if(isCountUpFocus()){
+    const elapsed=cuAccum+(running?Date.now()-cuStart:0);
+    txt=fmtMs(elapsed);
+    $("roundLabel").textContent="⏱ 正計時:做多久算多久,結束時按「完成」記錄";
+  }else{
+    txt=fmtMs(remainMs);
+    const inCycle=roundCount%settings.longEvery;
+    $("roundLabel").textContent="本循環第 "+(mode==="focus"? inCycle+1 : (inCycle===0? settings.longEvery : inCycle))+" 輪 / 每 "+settings.longEvery+" 輪長休息一次";
+  }
+  $("time").textContent=txt;
+  document.title = running ? (txt+" · "+modeName(mode)+" - 番茄專注鐘") : "番茄專注鐘";
   $("timerCard").classList.toggle("running", running);
+  if($("fsClock").classList.contains("open")){
+    $("fsTime").textContent=txt;
+    $("fsPhase").textContent=modeName(mode)+(running?"":"(暫停中)");
+  }
 }
-function updateButtons(){ $("startBtn").textContent = running ? "暫停" : "開始"; }
+function updateButtons(){
+  $("startBtn").textContent = running ? "暫停" : (cuActive&&cuAccum>0 ? "繼續" : "開始");
+  const cu=isCountUpFocus();
+  $("doneBtn").style.display = cu ? "" : "none";
+  $("skipBtn").style.display = cu ? "none" : "";
+}
 
-/* 計時狀態存起來:不小心重新整理頁面也能接續 */
+function toggleCountUpSetting(cb){
+  if(running){ cb.checked=settings.countUp; toast("計時進行中不能切換,先按暫停或完成"); return; }
+  settings.countUp=cb.checked; saveData();
+  resetTimer();
+}
+
 function saveTimerState(){
-  localStorage.setItem("pomo_timer", JSON.stringify({mode, running, endAt, remainMs}));
+  localStorage.setItem("pomo_timer", JSON.stringify({mode,running,endAt,remainMs,cuActive,cuStart,cuAccum}));
 }
 function restoreTimerState(){
   let s=null;
   try{ s=JSON.parse(localStorage.getItem("pomo_timer")||"null"); }catch(e){}
-  if(!s) { switchMode("focus",false); return; }
-  mode = ["focus","short","long"].includes(s.mode) ? s.mode : "focus";
+  if(!s){ switchMode("focus",false); return; }
+  mode=["focus","short","long"].includes(s.mode)?s.mode:"focus";
   switchMode(mode,false);
-  if(s.running && s.endAt > Date.now()){
-    remainMs = s.endAt - Date.now();
-    endAt = s.endAt; running=true; startTick(); requestWake();
+  if(s.cuActive && mode==="focus" && settings.countUp){
+    cuActive=true; cuAccum=s.cuAccum||0;
+    if(s.running){ cuStart=s.cuStart; running=true; startTick(); requestWake();
+      $("phaseLabel").textContent="專注中(正計時)…加油!"; }
+  }else if(s.running && s.endAt>Date.now()){
+    remainMs=s.endAt-Date.now(); endAt=s.endAt; running=true; startTick(); requestWake();
     $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
   }else if(s.running && s.endAt<=Date.now()){
-    // 關頁面期間時間已走完:算完成,直接進到下一階段
-    advance(true);
-  }else if(!s.running && s.remainMs>0 && s.remainMs < modeMinutes(mode)*60000){
-    remainMs = s.remainMs;
+    advance(true, mode==="focus"?settings.work:0); // 關頁面期間走完:算完成
+  }else if(!s.running && s.remainMs>0 && s.remainMs<modeMinutes(mode)*60000){
+    remainMs=s.remainMs;
   }
   updateDisplay(); updateButtons();
 }
 
-/* ============ 螢幕常亮(Wake Lock) ============ */
+/* ============ 全螢幕時鐘 ============ */
+function openFsClock(){
+  $("fsClock").classList.add("open"); updateDisplay();
+  if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
+}
+function closeFsClock(){
+  $("fsClock").classList.remove("open");
+  if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+}
+
+/* ============ 螢幕常亮 ============ */
 let wakeLockObj=null;
 async function requestWake(){
   if(!settings.wakeLock || !("wakeLock" in navigator)) return;
-  try{ wakeLockObj = await navigator.wakeLock.request("screen"); }catch(e){}
+  try{ wakeLockObj=await navigator.wakeLock.request("screen"); }catch(e){}
 }
 function releaseWake(){ if(wakeLockObj){ wakeLockObj.release().catch(()=>{}); wakeLockObj=null; } }
-document.addEventListener("visibilitychange", ()=>{
+document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState==="visible" && running) requestWake();
 });
 
-/* ============ 提示音(用程式做的鈴聲) ============ */
+/* ============ 提示音 ============ */
 let audioCtx=null, masterGain=null;
 function ensureAudioCtx(){
   if(!audioCtx){
-    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-    masterGain = audioCtx.createGain();
-    masterGain.gain.value = settings.volume/100;
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    masterGain=audioCtx.createGain();
+    masterGain.gain.value=settings.volume/100;
     masterGain.connect(audioCtx.destination);
   }
   if(audioCtx.state==="suspended") audioCtx.resume();
@@ -412,149 +930,426 @@ function ensureAudioCtx(){
 function playChime(isFocusEnd){
   try{
     ensureAudioCtx();
-    const notes = isFocusEnd ? [880,660,880] : [523,659,784]; // 專注結束/休息結束用不同音
+    const notes=isFocusEnd?[880,660,880]:[523,659,784];
     notes.forEach((f,i)=>{
-      const t = audioCtx.currentTime + i*0.28;
-      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      const t=audioCtx.currentTime+i*0.3;
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
       o.type="sine"; o.frequency.value=f;
       g.gain.setValueAtTime(0.0001,t);
-      g.gain.exponentialRampToValueAtTime(0.5,t+0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001,t+0.6);
+      g.gain.exponentialRampToValueAtTime(0.35,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.7);
       o.connect(g); g.connect(audioCtx.destination);
-      o.start(t); o.stop(t+0.7);
+      o.start(t); o.stop(t+0.8);
+    });
+  }catch(e){}
+}
+function playDing(){
+  try{
+    ensureAudioCtx();
+    [659,880].forEach((f,i)=>{
+      const t=audioCtx.currentTime+i*0.22;
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+      o.type="sine"; o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.18,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.5);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t); o.stop(t+0.6);
     });
   }catch(e){}
 }
 
-/* ============ 白噪音(全部用程式合成,不用音檔) ============ */
-let currentSound=null;   // "rain" | "ocean" | "cafe" | null
-let soundNodes=[];       // 目前在響的節點,停止時全部關掉
-let soundTimers=[];      // 排程用的計時器
+/* ============ 白噪音混音器 ============ */
+const SOUND_DEFS={
+  rain:{icon:"🌧️", name:"雨聲"},
+  ocean:{icon:"🌊", name:"海浪"},
+  cafe:{icon:"☕", name:"咖啡廳"},
+  fire:{icon:"🔥", name:"火堆"},
+  thunder:{icon:"⛈️", name:"遠雷"}
+};
+let mixOn={}, mixVol={rain:60,ocean:60,cafe:60,fire:60,thunder:60};
+let sndNodes={}, sndTimers={}, sndGain={};
+function volCurve(v){ return Math.pow(v/100,1.5); }
 
 function makeNoiseBuffer(type){
-  const len = audioCtx.sampleRate * 2;
-  const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
-  const data = buf.getChannelData(0);
-  if(type==="white"){
-    for(let i=0;i<len;i++) data[i]=Math.random()*2-1;
-  }else{ // brown(低沉)
+  const len=audioCtx.sampleRate*2;
+  const buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+  const d=buf.getChannelData(0);
+  if(type==="white"){ for(let i=0;i<len;i++) d[i]=Math.random()*2-1; }
+  else if(type==="pink"){
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for(let i=0;i<len;i++){
+      const w=Math.random()*2-1;
+      b0=0.99886*b0+w*0.0555179; b1=0.99332*b1+w*0.0750759;
+      b2=0.96900*b2+w*0.1538520; b3=0.86650*b3+w*0.3104856;
+      b4=0.55000*b4+w*0.5329522; b5=-0.7616*b5-w*0.0168980;
+      d[i]=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11; b6=w*0.115926;
+    }
+  }else{ // brown
     let last=0;
     for(let i=0;i<len;i++){
       const w=Math.random()*2-1;
-      last=(last+0.02*w)/1.02; data[i]=last*3.5;
+      last=(last+0.02*w)/1.02; d[i]=last*3.5;
     }
   }
   return buf;
 }
-function noiseSource(type){
-  const src=audioCtx.createBufferSource();
-  src.buffer=makeNoiseBuffer(type); src.loop=true;
-  return src;
+function noiseSrc(type){
+  const s=audioCtx.createBufferSource();
+  s.buffer=makeNoiseBuffer(type); s.loop=true; return s;
 }
-function reg(node){ soundNodes.push(node); return node; }
+function reg(name,node){ sndNodes[name].push(node); return node; }
+function addTimerFor(name,id){ sndTimers[name].push(id); }
 
-function startRain(){
-  // 持續的雨:白噪音 + 濾波,加一點緩慢起伏
-  const src=reg(noiseSource("white"));
-  const lp=reg(audioCtx.createBiquadFilter()); lp.type="lowpass"; lp.frequency.value=6500;
-  const hp=reg(audioCtx.createBiquadFilter()); hp.type="highpass"; hp.frequency.value=350;
-  const g=reg(audioCtx.createGain()); g.gain.value=0.42;
-  const lfo=reg(audioCtx.createOscillator()); lfo.frequency.value=0.25;
-  const lfoG=reg(audioCtx.createGain()); lfoG.gain.value=0.06;
-  lfo.connect(lfoG); lfoG.connect(g.gain);
-  src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(masterGain);
-  src.start(); lfo.start();
+function buildRain(name,out){
+  // 柔和的雨:粉紅噪音為主體,少量高頻沙沙
+  const body=reg(name,noiseSrc("pink"));
+  const lp=reg(name,audioCtx.createBiquadFilter()); lp.type="lowpass"; lp.frequency.value=3800;
+  const gA=reg(name,audioCtx.createGain()); gA.gain.value=0.6;
+  body.connect(lp); lp.connect(gA); gA.connect(out);
+  const patter=reg(name,noiseSrc("white"));
+  const bp=reg(name,audioCtx.createBiquadFilter()); bp.type="bandpass"; bp.frequency.value=5000; bp.Q.value=0.5;
+  const gB=reg(name,audioCtx.createGain()); gB.gain.value=0.05;
+  patter.connect(bp); bp.connect(gB); gB.connect(out);
+  const lfo=reg(name,audioCtx.createOscillator()); lfo.frequency.value=0.13;
+  const lfoG=reg(name,audioCtx.createGain()); lfoG.gain.value=0.05;
+  lfo.connect(lfoG); lfoG.connect(gA.gain);
+  body.start(); patter.start(); lfo.start();
 }
-function startOcean(){
-  // 海浪:低沉噪音,音量像波浪一樣慢慢起伏
-  const src=reg(noiseSource("brown"));
-  const lp=reg(audioCtx.createBiquadFilter()); lp.type="lowpass"; lp.frequency.value=650;
-  const g=reg(audioCtx.createGain()); g.gain.value=0.55;
-  const lfo=reg(audioCtx.createOscillator()); lfo.frequency.value=0.07;   // 一波約 14 秒
-  const lfoG=reg(audioCtx.createGain()); lfoG.gain.value=0.35;
-  lfo.connect(lfoG); lfoG.connect(g.gain);
-  const lfo2=reg(audioCtx.createOscillator()); lfo2.frequency.value=0.05; // 濾波也跟著波動
-  const lfo2G=reg(audioCtx.createGain()); lfo2G.gain.value=250;
-  lfo2.connect(lfo2G); lfo2G.connect(lp.frequency);
-  src.connect(lp); lp.connect(g); g.connect(masterGain);
-  src.start(); lfo.start(); lfo2.start();
+function buildOcean(name,out){
+  // 海浪:低沉噪音慢慢起伏,永遠留一點底聲不會全靜
+  const wave=reg(name,noiseSrc("brown"));
+  const lp=reg(name,audioCtx.createBiquadFilter()); lp.type="lowpass"; lp.frequency.value=480;
+  const g=reg(name,audioCtx.createGain()); g.gain.value=0.38;
+  const lfoA=reg(name,audioCtx.createOscillator()); lfoA.frequency.value=0.055;
+  const lfoAG=reg(name,audioCtx.createGain()); lfoAG.gain.value=0.22;
+  lfoA.connect(lfoAG); lfoAG.connect(g.gain);
+  const lfoF=reg(name,audioCtx.createOscillator()); lfoF.frequency.value=0.045;
+  const lfoFG=reg(name,audioCtx.createGain()); lfoFG.gain.value=170;
+  lfoF.connect(lfoFG); lfoFG.connect(lp.frequency);
+  wave.connect(lp); lp.connect(g); g.connect(out);
+  const floor=reg(name,noiseSrc("brown"));
+  const fLp=reg(name,audioCtx.createBiquadFilter()); fLp.type="lowpass"; fLp.frequency.value=280;
+  const fG=reg(name,audioCtx.createGain()); fG.gain.value=0.15;
+  floor.connect(fLp); fLp.connect(fG); fG.connect(out);
+  wave.start(); floor.start(); lfoA.start(); lfoF.start();
 }
-function startCafe(){
-  // 咖啡廳:低頻環境聲 + 模糊人聲感 + 偶爾的杯盤輕響
-  const rumble=reg(noiseSource("brown"));
-  const rLp=reg(audioCtx.createBiquadFilter()); rLp.type="lowpass"; rLp.frequency.value=420;
-  const rG=reg(audioCtx.createGain()); rG.gain.value=0.4;
-  rumble.connect(rLp); rLp.connect(rG); rG.connect(masterGain);
-  rumble.start();
-
-  const murmur=reg(noiseSource("white"));
-  const bp=reg(audioCtx.createBiquadFilter()); bp.type="bandpass"; bp.frequency.value=800; bp.Q.value=1.4;
-  const mG=reg(audioCtx.createGain()); mG.gain.value=0.16;
-  const wander=reg(audioCtx.createOscillator()); wander.frequency.value=0.06;
-  const wanderG=reg(audioCtx.createGain()); wanderG.gain.value=350;
+function buildCafe(name,out){
+  // 咖啡廳:低頻環境聲 + 模糊人聲 + 偶爾輕輕的杯盤聲
+  const rumble=reg(name,noiseSrc("brown"));
+  const rLp=reg(name,audioCtx.createBiquadFilter()); rLp.type="lowpass"; rLp.frequency.value=350;
+  const rG=reg(name,audioCtx.createGain()); rG.gain.value=0.34;
+  rumble.connect(rLp); rLp.connect(rG); rG.connect(out);
+  const murmur=reg(name,noiseSrc("pink"));
+  const bp=reg(name,audioCtx.createBiquadFilter()); bp.type="bandpass"; bp.frequency.value=650; bp.Q.value=0.9;
+  const mG=reg(name,audioCtx.createGain()); mG.gain.value=0.16;
+  const wander=reg(name,audioCtx.createOscillator()); wander.frequency.value=0.045;
+  const wanderG=reg(name,audioCtx.createGain()); wanderG.gain.value=220;
   wander.connect(wanderG); wanderG.connect(bp.frequency);
-  murmur.connect(bp); bp.connect(mG); mG.connect(masterGain);
-  murmur.start(); wander.start();
-
+  murmur.connect(bp); bp.connect(mG); mG.connect(out);
+  rumble.start(); murmur.start(); wander.start();
   function clink(){
-    if(currentSound!=="cafe") return;
+    if(!mixOn[name]) return;
     try{
       const o=audioCtx.createOscillator(), g=audioCtx.createGain();
-      o.type="triangle"; o.frequency.value=1600+Math.random()*1200;
+      o.type="sine"; o.frequency.value=1300+Math.random()*900;
       const t=audioCtx.currentTime;
       g.gain.setValueAtTime(0.0001,t);
-      g.gain.exponentialRampToValueAtTime(0.05+Math.random()*0.04,t+0.005);
-      g.gain.exponentialRampToValueAtTime(0.0001,t+0.15);
-      o.connect(g); g.connect(masterGain); o.start(t); o.stop(t+0.2);
+      g.gain.exponentialRampToValueAtTime(0.02+Math.random()*0.02,t+0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.25);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t+0.3);
     }catch(e){}
-    soundTimers.push(setTimeout(clink, 3000+Math.random()*7000));
+    addTimerFor(name,setTimeout(clink,7000+Math.random()*8000));
   }
-  soundTimers.push(setTimeout(clink, 2000));
+  addTimerFor(name,setTimeout(clink,4000));
 }
+function buildFire(name,out){
+  // 火堆:柔和的低鳴 + 隨機劈啪聲
+  const base=reg(name,noiseSrc("brown"));
+  const bLp=reg(name,audioCtx.createBiquadFilter()); bLp.type="lowpass"; bLp.frequency.value=500;
+  const bG=reg(name,audioCtx.createGain()); bG.gain.value=0.3;
+  base.connect(bLp); bLp.connect(bG); bG.connect(out);
+  base.start();
+  const crackBuf=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*0.08),audioCtx.sampleRate);
+  const cd=crackBuf.getChannelData(0);
+  for(let i=0;i<cd.length;i++) cd[i]=(Math.random()*2-1)*(1-i/cd.length);
+  function crackle(){
+    if(!mixOn[name]) return;
+    try{
+      const s=audioCtx.createBufferSource(); s.buffer=crackBuf;
+      s.playbackRate.value=0.7+Math.random()*1.6;
+      const f=audioCtx.createBiquadFilter(); f.type="bandpass";
+      f.frequency.value=1200+Math.random()*2500; f.Q.value=1;
+      const g=audioCtx.createGain(); g.gain.value=0.04+Math.random()*0.09;
+      s.connect(f); f.connect(g); g.connect(out); s.start();
+    }catch(e){}
+    addTimerFor(name,setTimeout(crackle,90+Math.random()*350));
+  }
+  addTimerFor(name,setTimeout(crackle,300));
+}
+function buildThunder(name,out){
+  // 遠雷:微弱的底聲 + 每 15~45 秒一聲遠遠的悶雷
+  const floor=reg(name,noiseSrc("brown"));
+  const fLp=reg(name,audioCtx.createBiquadFilter()); fLp.type="lowpass"; fLp.frequency.value=100;
+  const fG=reg(name,audioCtx.createGain()); fG.gain.value=0.07;
+  floor.connect(fLp); fLp.connect(fG); fG.connect(out);
+  floor.start();
+  function rumble(){
+    if(!mixOn[name]) return;
+    try{
+      const s=audioCtx.createBufferSource(); s.buffer=makeNoiseBuffer("brown"); s.loop=true;
+      const lp=audioCtx.createBiquadFilter(); lp.type="lowpass";
+      lp.frequency.value=90+Math.random()*120;
+      const g=audioCtx.createGain();
+      const t=audioCtx.currentTime, dur=3+Math.random()*3;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.4+Math.random()*0.3,t+1.2);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+      s.connect(lp); lp.connect(g); g.connect(out);
+      s.start(t); s.stop(t+dur+0.2);
+    }catch(e){}
+    addTimerFor(name,setTimeout(rumble,15000+Math.random()*30000));
+  }
+  addTimerFor(name,setTimeout(rumble,1500));
+}
+const SOUND_BUILDERS={rain:buildRain,ocean:buildOcean,cafe:buildCafe,fire:buildFire,thunder:buildThunder};
 
-function stopSound(){
-  soundTimers.forEach(t=>clearTimeout(t)); soundTimers=[];
-  soundNodes.forEach(n=>{ try{n.stop&&n.stop();}catch(e){} try{n.disconnect();}catch(e){} });
-  soundNodes=[]; currentSound=null;
-  document.querySelectorAll(".sound").forEach(el=>{
-    el.classList.remove("playing"); el.querySelector(".state").textContent="停止中";
-  });
-}
-function toggleSound(name){
+function startSound(name){
   ensureAudioCtx();
-  const wasPlaying = (currentSound===name);
-  stopSound();
-  if(wasPlaying) return; // 再點一次同一個 = 停止
-  currentSound=name;
-  if(name==="rain") startRain();
-  else if(name==="ocean") startOcean();
-  else startCafe();
-  const el=$("snd-"+name);
-  el.classList.add("playing"); el.querySelector(".state").textContent="播放中";
+  if(mixOn[name]) return;
+  sndNodes[name]=[]; sndTimers[name]=[];
+  const g=audioCtx.createGain();
+  g.gain.value=volCurve(mixVol[name]);
+  g.connect(masterGain);
+  sndGain[name]=g;
+  mixOn[name]=true;
+  SOUND_BUILDERS[name](name,g);
+  updateSoundCard(name);
+}
+function stopSoundOne(name){
+  if(!mixOn[name]) return;
+  mixOn[name]=false;
+  (sndTimers[name]||[]).forEach(t=>clearTimeout(t)); sndTimers[name]=[];
+  (sndNodes[name]||[]).forEach(n=>{ try{n.stop&&n.stop();}catch(e){} try{n.disconnect();}catch(e){} });
+  sndNodes[name]=[];
+  if(sndGain[name]){ try{sndGain[name].disconnect();}catch(e){} delete sndGain[name]; }
+  updateSoundCard(name);
+}
+function stopAllSounds(){ Object.keys(SOUND_DEFS).forEach(stopSoundOne); }
+function toggleSound(name){ mixOn[name] ? stopSoundOne(name) : startSound(name); }
+function setSndVol(name,v){
+  mixVol[name]=parseInt(v,10);
+  if(sndGain[name]) sndGain[name].gain.value=volCurve(mixVol[name]);
+  saveData();
 }
 function setVolume(v){
   settings.volume=parseInt(v,10);
   if(masterGain) masterGain.gain.value=settings.volume/100;
   saveData();
 }
+function updateSoundCard(name){
+  const el=$("snd-"+name); if(!el) return;
+  el.classList.toggle("playing", !!mixOn[name]);
+  el.querySelector(".state").textContent = mixOn[name] ? "播放中" : "停止中";
+}
+function renderSoundGrid(){
+  const grid=$("soundGrid"); grid.innerHTML="";
+  for(const key in SOUND_DEFS){
+    const d=SOUND_DEFS[key];
+    const el=document.createElement("div");
+    el.className="sound"; el.id="snd-"+key;
+    el.onclick=()=>toggleSound(key);
+    el.innerHTML='<div class="icon">'+d.icon+'</div><div class="name">'+d.name+'</div>'
+      +'<div class="state">停止中</div>'
+      +'<input type="range" min="0" max="100" value="'+(mixVol[key]||60)+'">';
+    const slider=el.querySelector("input");
+    slider.oninput=e=>setSndVol(key,e.target.value);
+    slider.onclick=e=>e.stopPropagation();
+    slider.ontouchstart=e=>e.stopPropagation();
+    slider.onpointerdown=e=>e.stopPropagation();
+    grid.appendChild(el);
+  }
+}
+function applyMix(mix){
+  stopAllSounds();
+  for(const name in mix){
+    if(!SOUND_DEFS[name]) continue;
+    mixVol[name]=mix[name];
+    startSound(name);
+  }
+  renderSoundGrid();
+  for(const name in mixOn) if(mixOn[name]) updateSoundCard(name);
+  saveData();
+}
+
+/* 常用組合 */
+function renderFavs(){
+  const row=$("favRow"); row.innerHTML="";
+  favMixes.forEach((f,i)=>{
+    const chip=document.createElement("div");
+    chip.className="fav-chip";
+    chip.innerHTML='<span>🎵 '+f.name+'</span><span class="del">✕</span>';
+    chip.querySelector(".del").onclick=e=>{
+      e.stopPropagation();
+      if(confirm("刪除組合「"+f.name+"」?")){ favMixes.splice(i,1); saveData(); renderFavs(); }
+    };
+    chip.onclick=()=>{ applyMix(f.mix); toast("🎵 已套用「"+f.name+"」"); };
+    row.appendChild(chip);
+  });
+  const save=document.createElement("button");
+  save.className="fav-save"; save.textContent="＋ 存目前組合";
+  save.onclick=saveFav;
+  row.appendChild(save);
+}
+function saveFav(){
+  const active=Object.keys(mixOn).filter(k=>mixOn[k]);
+  if(active.length===0){ toast("先開啟至少一種音效再儲存"); return; }
+  const name=prompt("幫這個組合取個名字:", active.map(k=>SOUND_DEFS[k].name).join("+"));
+  if(!name) return;
+  const mix={}; active.forEach(k=>mix[k]=mixVol[k]);
+  favMixes.push({name:name.slice(0,20), mix});
+  saveData(); renderFavs();
+  toast("✅ 已儲存「"+name.slice(0,20)+"」");
+}
+
+/* 睡眠定時 */
+let sleepEndAt=0, sleepFadeId=null, sleepStopId=null;
+function setSleepTimer(v){
+  const mins=parseInt(v,10);
+  clearTimeout(sleepFadeId); clearTimeout(sleepStopId);
+  sleepFadeId=null; sleepStopId=null; sleepEndAt=0;
+  if(masterGain) masterGain.gain.value=settings.volume/100;
+  if(mins>0){
+    sleepEndAt=Date.now()+mins*60000;
+    sleepFadeId=setTimeout(()=>{
+      if(masterGain){
+        try{
+          masterGain.gain.setValueAtTime(masterGain.gain.value,audioCtx.currentTime);
+          masterGain.gain.linearRampToValueAtTime(0.0001,audioCtx.currentTime+30);
+        }catch(e){}
+      }
+      sleepStopId=setTimeout(()=>{
+        stopAllSounds();
+        if(masterGain) masterGain.gain.value=settings.volume/100;
+        sleepEndAt=0; $("sleepSelect").value="0"; updateSleepLeft();
+      },30500);
+    },mins*60000);
+    toast("😴 "+mins+" 分鐘後音效會慢慢變小然後停止");
+  }
+  updateSleepLeft();
+}
+function updateSleepLeft(){
+  const el=$("sleepLeft");
+  if(sleepEndAt>0){
+    const left=Math.max(0,Math.ceil((sleepEndAt-Date.now())/60000));
+    el.textContent="(剩約 "+left+" 分)";
+  }else el.textContent="";
+}
+
+/* ============ 情境預設 ============ */
+const PRESETS=[
+  {name:"工作", work:25, mix:{rain:60}},
+  {name:"讀書", work:50, mix:{cafe:60}},
+  {name:"放鬆", work:10, mix:{ocean:60}}
+];
+function applyPreset(i){
+  const p=PRESETS[i];
+  if(running){ if(!confirm("計時進行中,套用情境會取消目前這一輪,確定嗎?")) return; }
+  settings.work=p.work; saveData(); applySettingsToUI();
+  applyMix(p.mix);
+  switchMode("focus",false);
+  toast("已套用「"+p.name+"」:專注 "+p.work+" 分鐘,按開始就緒");
+}
+
+/* ============ 任務清單 ============ */
+function addTask(){
+  const inp=$("taskInput");
+  const name=inp.value.trim();
+  if(!name){ toast("先輸入任務名稱"); return; }
+  const id="t"+Date.now()+Math.floor(Math.random()*1000);
+  tasks.push({id, name, done:false, pomos:0});
+  inp.value="";
+  if(!activeTask) activeTask=id;  // 第一個任務自動設為目前任務
+  saveData(); renderTasks();
+}
+function pickTask(id){
+  activeTask=id||null; saveData(); renderTasks();
+}
+function completeTask(id){
+  const t=tasks.find(x=>x.id===id); if(!t) return;
+  t.done=true;
+  if(activeTask===id) activeTask=null;
+  saveData(); renderTasks();
+  toast("🎉 完成任務「"+t.name+"」!");
+}
+function reopenTask(id){
+  const t=tasks.find(x=>x.id===id); if(!t) return;
+  t.done=false; saveData(); renderTasks();
+}
+function deleteTask(id){
+  const t=tasks.find(x=>x.id===id); if(!t) return;
+  if(!confirm("刪除任務「"+t.name+"」?(已記錄的專注時間不會消失)")) return;
+  tasks=tasks.filter(x=>x.id!==id);
+  if(activeTask===id) activeTask=null;
+  saveData(); renderTasks();
+}
+function renderTasks(){
+  const list=$("taskList"), done=$("doneList");
+  list.innerHTML=""; done.innerHTML="";
+  const act=tasks.filter(t=>!t.done), fin=tasks.filter(t=>t.done);
+  if(act.length===0) list.innerHTML='<div class="empty-note">還沒有任務,輸入一件要做的事開始吧!<br>(不新增任務也可以直接計時)</div>';
+  act.forEach(t=>{
+    const el=document.createElement("div");
+    el.className="task-item"+(t.id===activeTask?" current":"");
+    el.innerHTML='<div class="pick" title="設為目前任務"></div>'
+      +'<div class="tname">'+escapeHtml(t.name)+'</div>'
+      +'<div class="tcount">🍅×'+(t.pomos||0)+'</div>'
+      +'<button class="tbtn">✓ 完成</button>';
+    el.querySelector(".pick").onclick=()=>pickTask(t.id===activeTask?null:t.id);
+    el.querySelector(".tbtn").onclick=()=>completeTask(t.id);
+    list.appendChild(el);
+  });
+  if(fin.length===0) done.innerHTML='<div class="empty-note">完成的任務會出現在這裡</div>';
+  fin.forEach(t=>{
+    const el=document.createElement("div");
+    el.className="task-item done-item";
+    el.innerHTML='<div class="tname">'+escapeHtml(t.name)+'</div>'
+      +'<div class="tcount">🍅×'+(t.pomos||0)+'</div>'
+      +'<button class="tbtn">↩ 復原</button><button class="tbtn">🗑</button>';
+    const btns=el.querySelectorAll(".tbtn");
+    btns[0].onclick=()=>reopenTask(t.id);
+    btns[1].onclick=()=>deleteTask(t.id);
+    done.appendChild(el);
+  });
+  renderTaskSelect();
+}
+function renderTaskSelect(){
+  const sel=$("taskSelect");
+  sel.innerHTML="";
+  const opt0=document.createElement("option");
+  opt0.value=""; opt0.textContent="📝 這一輪不指定任務";
+  sel.appendChild(opt0);
+  tasks.filter(t=>!t.done).forEach(t=>{
+    const o=document.createElement("option");
+    o.value=t.id; o.textContent="🎯 "+t.name+"(🍅×"+(t.pomos||0)+")";
+    sel.appendChild(o);
+  });
+  sel.value=activeTask&&tasks.some(t=>t.id===activeTask&&!t.done)?activeTask:"";
+}
+function escapeHtml(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
 
 /* ============ 統計 ============ */
 function renderStats(){
   const today=todayStr();
-  const byDay={};
-  sessions.forEach(s=>{ byDay[s.d]=(byDay[s.d]||0)+s.m; });
-  const countByDay={};
-  sessions.forEach(s=>{ countByDay[s.d]=(countByDay[s.d]||0)+1; });
+  const byDay={}, countByDay={};
+  sessions.forEach(s=>{ byDay[s.d]=(byDay[s.d]||0)+s.m; countByDay[s.d]=(countByDay[s.d]||0)+1; });
 
   $("statToday").innerHTML=(countByDay[today]||0)+" <small>顆</small>";
   $("statTodayMin").textContent=byDay[today]||0;
-
   let week=0;
   for(let i=0;i>-7;i--) week+=byDay[todayStr(i)]||0;
   $("statWeek").innerHTML=week+" <small>分鐘</small>";
   $("statTotal").innerHTML=sessions.length+" <small>顆</small>";
-
-  // 連續天數:從今天(或昨天)往回數,每天都有至少 1 顆
   let streak=0, start=(countByDay[today]?0:-1);
   for(let i=start;;i--){
     if(countByDay[todayStr(i)]) streak++; else break;
@@ -562,28 +1357,220 @@ function renderStats(){
   }
   $("statStreak").innerHTML=streak+" <small>天</small>";
 
+  // 熱力圖(最近 20 週,直的一排是一週)
+  const heat=$("heatGrid"); heat.innerHTML="";
+  const totalDays=140;
+  const first=new Date(); first.setDate(first.getDate()-totalDays+1);
+  const lead=(first.getDay()+6)%7; // 往前補到週一對齊
+  for(let i=0;i<lead;i++){ const c=document.createElement("div"); c.className="heat-cell"; c.style.visibility="hidden"; heat.appendChild(c); }
+  for(let i=totalDays-1;i>=0;i--){
+    const ds=todayStr(-i), m=byDay[ds]||0;
+    const lv=m===0?0 : m<25?1 : m<50?2 : m<100?3 : 4;
+    const c=document.createElement("div");
+    c.className="heat-cell"+(lv>0?" heat-"+lv:"");
+    c.title=ds+":"+m+" 分鐘";
+    heat.appendChild(c);
+  }
+  const sc=heat.parentElement;
+  requestAnimationFrame(()=>{ sc.scrollLeft=sc.scrollWidth; });
+
   // 最近 14 天長條圖
   const chart=$("chart"), days=$("chartDays");
   chart.innerHTML=""; days.innerHTML="";
-  let max=1;
-  const vals=[];
+  let max=1; const vals=[];
   for(let i=-13;i<=0;i++){ const v=byDay[todayStr(i)]||0; vals.push(v); if(v>max)max=v; }
   vals.forEach((v,idx)=>{
     const bar=document.createElement("div");
     bar.className="bar"+(v>0?" has":"");
-    bar.style.height=Math.max(3, Math.round(v/max*100))+"%";
+    bar.style.height=Math.max(3,Math.round(v/max*100))+"%";
     bar.title=todayStr(idx-13)+":"+v+" 分鐘";
     chart.appendChild(bar);
     const d=document.createElement("div");
-    d.textContent=todayStr(idx-13).slice(8); // 只顯示「日」
+    d.textContent=todayStr(idx-13).slice(8);
     days.appendChild(d);
   });
+
+  // 專注度統計
+  const mc={2:0,1:0,0:0};
+  sessions.forEach(s=>{ if(s.mood!==undefined) mc[s.mood]=(mc[s.mood]||0)+1; });
+  const total=mc[2]+mc[1]+mc[0];
+  $("moodSum").innerHTML = total===0
+    ? '<div class="m" style="flex:1"><div class="l" style="padding:6px 0">開啟「記錄專注度」後,這裡會統計每輪的專注狀態</div></div>'
+    : '<div class="m"><div class="f">😃</div><div class="c">'+mc[2]+'</div><div class="l">很專注</div></div>'
+     +'<div class="m"><div class="f">🙂</div><div class="c">'+mc[1]+'</div><div class="l">普通</div></div>'
+     +'<div class="m"><div class="f">😵</div><div class="c">'+mc[0]+'</div><div class="l">分心了</div></div>';
+}
+
+/* ============ 心情記錄 ============ */
+function recordMood(v){
+  if(sessions.length>0){ sessions[sessions.length-1].mood=v; saveData(); renderStats(); }
+  closeMood();
+}
+function closeMood(){ $("moodOv").classList.remove("open"); }
+
+/* ============ 休息微運動 ============ */
+const MICRO=[
+  "聳肩 10 下,放鬆肩頸","手腕慢慢畫圈 20 秒","深蹲 5 下","原地踏步 30 秒",
+  "伸個大懶腰,雙手舉高高","脖子左右慢慢各轉 5 圈","踮腳尖 15 下","喝口水,看看窗外遠方",
+  "站起來走一小圈","身體左右側彎各 10 秒","開合跳 10 下","雙手向後擴胸 10 次"
+];
+function showMicro(){
+  const card=$("microCard");
+  card.textContent="🤸 休息小任務:"+MICRO[Math.floor(Math.random()*MICRO.length)];
+  card.style.display="block";
+}
+
+/* ============ 呼吸練習(4-7-8) ============ */
+const BREATH_PHASES=[{n:"吸氣",s:4,sc:1},{n:"屏息",s:7,sc:1},{n:"吐氣",s:8,sc:0.45}];
+let breathOpen=false, breathTimerId=null;
+function openBreath(){
+  $("breathOv").classList.add("open"); breathOpen=true;
+  runBreath(0,0);
+}
+function runBreath(cycle,phaseIdx){
+  if(!breathOpen) return;
+  if(cycle>=4){
+    $("breathPhase").textContent="完成 🎉 感覺好多了嗎?";
+    $("breathCount").textContent="";
+    $("breathCircle").style.transform="scale(.45)";
+    return;
+  }
+  const p=BREATH_PHASES[phaseIdx];
+  $("breathPhase").textContent=p.n+" "+p.s+" 秒";
+  $("breathCount").textContent="第 "+(cycle+1)+" / 4 輪";
+  const c=$("breathCircle");
+  c.style.transition="transform "+p.s+"s "+(p.n==="屏息"?"steps(1,end)":"ease-in-out");
+  c.style.transform="scale("+p.sc+")";
+  breathTimerId=setTimeout(()=>{
+    const next=phaseIdx+1;
+    if(next>=BREATH_PHASES.length) runBreath(cycle+1,0);
+    else runBreath(cycle,next);
+  },p.s*1000);
+}
+function closeBreath(){
+  breathOpen=false; clearTimeout(breathTimerId);
+  $("breathOv").classList.remove("open");
+  $("breathCircle").style.transform="scale(.45)";
+}
+
+/* ============ 伸展引導 ============ */
+const STRETCH_STEPS=[
+  {e:"🙆",n:"頸部右傾",d:"右耳慢慢往右肩靠,感覺左邊脖子被拉開",s:15},
+  {e:"🙆",n:"頸部左傾",d:"左耳慢慢往左肩靠,感覺右邊脖子被拉開",s:15},
+  {e:"🙇",n:"低頭伸展",d:"下巴往胸口收,雙手輕輕放在後腦勺",s:15},
+  {e:"🔄",n:"肩膀繞圈",d:"肩膀往後慢慢繞大圈,越大圈越好",s:20},
+  {e:"💪",n:"聳肩放鬆",d:"肩膀用力聳起停 3 秒再放鬆,重複做",s:20},
+  {e:"🤚",n:"手腕伸展(右)",d:"右手臂伸直、掌心朝上,左手把手指輕輕往下扳",s:15},
+  {e:"🤚",n:"手腕伸展(左)",d:"左手臂伸直、掌心朝上,右手把手指輕輕往下扳",s:15},
+  {e:"✊",n:"握拳張開",d:"用力握拳再五指用力張開,重複做",s:15}
+];
+let stretchIdx=0, stretchLeft=0, stretchTimerId=null;
+function openStretch(){
+  $("stretchOv").classList.add("open");
+  stretchIdx=0; startStretchStep();
+}
+function startStretchStep(){
+  clearInterval(stretchTimerId);
+  if(stretchIdx>=STRETCH_STEPS.length){
+    $("stretchStep").textContent="";
+    $("stretchEmoji").textContent="🎉";
+    $("stretchName").textContent="全部完成!";
+    $("stretchDesc").textContent="肩頸和手腕舒服多了,回去繼續加油";
+    $("stretchSec").textContent="";
+    return;
+  }
+  const st=STRETCH_STEPS[stretchIdx];
+  $("stretchStep").textContent="第 "+(stretchIdx+1)+" / "+STRETCH_STEPS.length+" 個動作";
+  $("stretchEmoji").textContent=st.e;
+  $("stretchName").textContent=st.n;
+  $("stretchDesc").textContent=st.d;
+  stretchLeft=st.s;
+  $("stretchSec").textContent=stretchLeft;
+  stretchTimerId=setInterval(()=>{
+    stretchLeft--;
+    $("stretchSec").textContent=stretchLeft;
+    if(stretchLeft<=0){ playDing(); stretchIdx++; startStretchStep(); }
+  },1000);
+}
+function stretchNext(){ stretchIdx++; startStretchStep(); }
+function closeStretch(){
+  clearInterval(stretchTimerId);
+  $("stretchOv").classList.remove("open");
+}
+
+/* ============ 健康提醒 ============ */
+const REM_DEFS={
+  water:{icon:"💧", msg:"該喝水囉!補充一下水分"},
+  sit:{icon:"🧍", msg:"坐太久了,站起來動一動、伸展一下吧"},
+  eye:{icon:"👀", msg:"讓眼睛休息:看 6 公尺以外的地方 20 秒,記得多眨眨眼"},
+  stand:{icon:"🔄", msg:"換個姿勢:坐著的站起來,站著的坐下休息"}
+};
+let remNext={}, dailyFlags={};
+try{ dailyFlags=JSON.parse(localStorage.getItem("pomo_dailyflags")||"{}")||{}; }catch(e){}
+function scheduleRem(key){
+  const h=settings.health[key];
+  if(h && h.on) remNext[key]=Date.now()+h.min*60000;
+  else delete remNext[key];
+}
+function scheduleAllRems(){ Object.keys(REM_DEFS).forEach(scheduleRem); }
+let remHideId=null;
+function fireRem(icon,text){
+  $("remIcon").textContent=icon;
+  $("remText").textContent=text;
+  $("remBanner").classList.add("show");
+  clearTimeout(remHideId);
+  remHideId=setTimeout(hideRem,15000);
+  playDing();
+  if(navigator.vibrate) navigator.vibrate(200);
+}
+function hideRem(){ $("remBanner").classList.remove("show"); }
+function checkReminders(){
+  const now=Date.now();
+  for(const key in REM_DEFS){
+    if(remNext[key] && now>=remNext[key]){
+      fireRem(REM_DEFS[key].icon, REM_DEFS[key].msg);
+      remNext[key]=now+settings.health[key].min*60000;
+      break; // 一次只跳一個,避免同時疊很多
+    }
+  }
+  const hhmm=new Date().toTimeString().slice(0,5);
+  const today=todayStr();
+  if(settings.health.caffeine.on && hhmm>=settings.health.caffeine.time && dailyFlags.caffeine!==today){
+    dailyFlags.caffeine=today;
+    localStorage.setItem("pomo_dailyflags",JSON.stringify(dailyFlags));
+    fireRem("☕","過了 "+settings.health.caffeine.time+" 囉,今天先別再喝咖啡,晚上才好睡");
+  }
+  if(settings.health.bed.on && hhmm>=settings.health.bed.time && dailyFlags.bed!==today){
+    dailyFlags.bed=today;
+    localStorage.setItem("pomo_dailyflags",JSON.stringify(dailyFlags));
+    fireRem("🌙","到就寢提醒時間了,做個收尾,別熬夜囉");
+  }
+  updateSleepLeft();
+}
+function saveHealth(){
+  const clampN=(v,lo,hi,dv)=>{v=parseInt(v,10); return isNaN(v)?dv:Math.min(hi,Math.max(lo,v));};
+  settings.health.water={on:$("hWaterOn").checked, min:clampN($("hWaterMin").value,10,240,45)};
+  settings.health.sit={on:$("hSitOn").checked, min:clampN($("hSitMin").value,10,240,50)};
+  settings.health.eye={on:$("hEyeOn").checked, min:clampN($("hEyeMin").value,10,120,20)};
+  settings.health.stand={on:$("hStandOn").checked, min:clampN($("hStandMin").value,15,240,60)};
+  settings.health.caffeine={on:$("hCafOn").checked, time:$("hCafTime").value||"14:00"};
+  settings.health.bed={on:$("hBedOn").checked, time:$("hBedTime").value||"23:00"};
+  saveData(); applyHealthToUI(); scheduleAllRems();
+}
+function applyHealthToUI(){
+  const h=settings.health;
+  $("hWaterOn").checked=h.water.on; $("hWaterMin").value=h.water.min;
+  $("hSitOn").checked=h.sit.on; $("hSitMin").value=h.sit.min;
+  $("hEyeOn").checked=h.eye.on; $("hEyeMin").value=h.eye.min;
+  $("hStandOn").checked=h.stand.on; $("hStandMin").value=h.stand.min;
+  $("hCafOn").checked=h.caffeine.on; $("hCafTime").value=h.caffeine.time;
+  $("hBedOn").checked=h.bed.on; $("hBedTime").value=h.bed.time;
 }
 
 /* ============ 匯出/匯入備份 ============ */
 function exportBackup(){
-  const data={app:"pomodoro-whitenoise", version:1, exportedAt:new Date().toISOString(),
-              settings, sessions, roundCount};
+  const data={app:"pomodoro-whitenoise", version:2, exportedAt:new Date().toISOString(),
+    settings, sessions, roundCount, tasks, activeTask, favMixes, mixVol};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
@@ -603,17 +1590,30 @@ function importBackup(input){
       alert("這個檔案不是番茄鐘的備份檔,沒有做任何變更。\n請確認你選的是之前用「匯出備份」存下來的檔案。");
       return;
     }
-    const ok=confirm("備份檔內容:\n・專注紀錄 "+data.sessions.length+" 筆\n・匯出日期:"+(data.exportedAt||"未知").slice(0,10)
+    const ok=confirm("備份檔內容:\n・專注紀錄 "+data.sessions.length+" 筆\n・任務 "+((data.tasks||[]).length)+" 個\n・匯出日期:"+(data.exportedAt||"未知").slice(0,10)
       +"\n\n匯入會【覆蓋】目前裝置上的紀錄("+sessions.length+" 筆),確定要匯入嗎?");
     if(!ok) return;
-    sessions=data.sessions;
-    settings={...DEFAULT_SETTINGS, ...(data.settings||{})};
-    roundCount=parseInt(data.roundCount,10)||0;
-    localStorage.setItem("pomo_rounds", String(roundCount));
-    saveData(); applySettingsToUI(); renderStats(); switchMode(mode,false);
+    applyImport(data);
     toast("✅ 匯入完成!紀錄已還原");
   };
   reader.readAsText(file);
+}
+function applyImport(data){
+  sessions=data.sessions;
+  const s=data.settings||{};
+  settings={...DEFAULT_SETTINGS, ...s, health:{}};
+  for(const k in DEFAULT_SETTINGS.health)
+    settings.health[k]={...DEFAULT_SETTINGS.health[k], ...((s.health&&s.health[k])||{})};
+  roundCount=parseInt(data.roundCount,10)||0;
+  localStorage.setItem("pomo_rounds", String(roundCount));
+  tasks=Array.isArray(data.tasks)?data.tasks:[];
+  activeTask=data.activeTask||null;
+  favMixes=Array.isArray(data.favMixes)?data.favMixes:[];
+  if(data.mixVol) for(const k in data.mixVol) if(SOUND_DEFS[k]) mixVol[k]=data.mixVol[k];
+  saveData();
+  applySettingsToUI(); applyHealthToUI(); renderTasks(); renderStats();
+  renderSoundGrid(); renderFavs(); renderQuote(); scheduleAllRems();
+  switchMode(mode,false);
 }
 
 /* ============ 設定 ============ */
@@ -623,6 +1623,10 @@ function applySettingsToUI(){
   $("setAutoWork").checked=settings.autoStartWork;
   $("setAutoBreak").checked=settings.autoStartBreak;
   $("setWake").checked=settings.wakeLock;
+  $("setMicro").checked=settings.microEx;
+  $("setMood").checked=settings.moodLog;
+  $("setQuote").checked=settings.dailyQuote;
+  $("cuToggle").checked=settings.countUp;
   $("volSlider").value=settings.volume;
   if(masterGain) masterGain.gain.value=settings.volume/100;
 }
@@ -635,17 +1639,26 @@ function saveSettings(){
   settings.autoStartWork=$("setAutoWork").checked;
   settings.autoStartBreak=$("setAutoBreak").checked;
   settings.wakeLock=$("setWake").checked;
-  saveData(); applySettingsToUI();
+  settings.microEx=$("setMicro").checked;
+  settings.moodLog=$("setMood").checked;
+  settings.dailyQuote=$("setQuote").checked;
+  saveData(); applySettingsToUI(); renderQuote();
   if(!running){ remainMs=modeMinutes(mode)*60000; updateDisplay(); }
 }
 
 /* ============ 啟動 ============ */
 load();
+renderSoundGrid();
+renderFavs();
 applySettingsToUI();
+applyHealthToUI();
+renderQuote();
+renderTasks();
 renderStats();
 restoreTimerState();
+scheduleAllRems();
+setInterval(checkReminders,20000);
 
-// 離線快取(只有放到網路上時才需要;直接開檔案用不到也不會出錯)
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js").catch(()=>{});
 }

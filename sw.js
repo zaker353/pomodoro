@@ -1,5 +1,5 @@
 // 離線快取:第一次開啟後,之後沒網路也能用
-const CACHE = "pomo-v1";
+const CACHE = "pomo-v2";
 const FILES = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
