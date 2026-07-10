@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1a1c2c">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>番茄專注鐘</title>
+<style>
+  :root{
+    --bg:#1a1c2c; --card:#242940; --card2:#2d3352; --text:#eef0ff; --dim:#9aa0c3;
+    --focus:#ff6b6b; --short:#51cf8e; --long:#5ea8ff; --accent:var(--focus);
+    --radius:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"Microsoft JhengHei","PingFang TC",system-ui,sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100vh; padding:12px 12px 40px;
+  }
+  .wrap{width:100%; max-width:480px;}
+  header{display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 0 4px;}
+  header h1{font-size:20px; margin:0; letter-spacing:1px;}
+
+  /* 模式切換 */
+  .modes{display:flex; gap:8px; margin:14px 0;}
+  .modes button{
+    flex:1; padding:10px 0; border:none; border-radius:12px; cursor:pointer;
+    background:var(--card); color:var(--dim); font-size:15px; font-weight:bold;
+    transition:all .2s;
+  }
+  .modes button.active{background:var(--accent); color:#fff;}
+
+  /* 計時器 */
+  .timer-card{
+    background:var(--card); border-radius:var(--radius); padding:24px 16px 20px;
+    text-align:center; border:2px solid transparent; transition:border-color .3s;
+  }
+  .timer-card.running{border-color:var(--accent);}
+  #time{
+    font-size:76px; font-weight:bold; letter-spacing:2px; line-height:1;
+    font-variant-numeric:tabular-nums; margin:6px 0 2px;
+  }
+  #phaseLabel{color:var(--dim); font-size:15px;}
+  #roundLabel{color:var(--dim); font-size:13px; margin-top:6px;}
+  .timer-btns{display:flex; gap:10px; margin-top:18px; justify-content:center;}
+  .btn{
+    border:none; border-radius:14px; cursor:pointer; font-weight:bold;
+    font-size:16px; padding:14px 0; transition:transform .1s, opacity .2s;
+  }
+  .btn:active{transform:scale(.96);}
+  #startBtn{flex:2; background:var(--accent); color:#fff; font-size:20px;}
+  .btn.sub{flex:1; background:var(--card2); color:var(--dim); font-size:14px;}
+
+  section{margin-top:18px;}
+  section h2{font-size:15px; color:var(--dim); margin:0 0 10px 4px; letter-spacing:1px;}
+
+  /* 白噪音 */
+  .sounds{display:flex; gap:10px;}
+  .sound{
+    flex:1; background:var(--card); border-radius:var(--radius); border:2px solid transparent;
+    padding:14px 4px 12px; text-align:center; cursor:pointer; transition:all .2s;
+  }
+  .sound .icon{font-size:30px;}
+  .sound .name{font-size:14px; margin-top:6px; color:var(--text);}
+  .sound .state{font-size:11px; color:var(--dim); margin-top:3px;}
+  .sound.playing{border-color:var(--accent); background:var(--card2);}
+  .sound.playing .state{color:var(--accent);}
+  .vol-row{display:flex; align-items:center; gap:10px; margin-top:12px; padding:0 4px;}
+  .vol-row span{font-size:18px;}
+  input[type=range]{flex:1; accent-color:var(--accent); height:24px;}
+
+  /* 統計 */
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .stat{background:var(--card); border-radius:var(--radius); padding:12px 14px;}
+  .stat .num{font-size:24px; font-weight:bold;}
+  .stat .num small{font-size:13px; font-weight:normal; color:var(--dim);}
+  .stat .label{font-size:12px; color:var(--dim); margin-top:2px;}
+  .chart-card{background:var(--card); border-radius:var(--radius); padding:14px; margin-top:10px;}
+  .chart-title{font-size:12px; color:var(--dim); margin-bottom:8px;}
+  .chart{display:flex; align-items:flex-end; gap:3px; height:80px;}
+  .chart .bar{
+    flex:1; background:var(--card2); border-radius:3px 3px 0 0; min-height:3px;
+    position:relative;
+  }
+  .chart .bar.has{background:var(--accent);}
+  .chart-days{display:flex; gap:3px; margin-top:4px;}
+  .chart-days div{flex:1; text-align:center; font-size:9px; color:var(--dim);}
+
+  /* 設定 */
+  details{background:var(--card); border-radius:var(--radius); padding:0 16px;}
+  details summary{
+    padding:14px 0; cursor:pointer; font-weight:bold; font-size:15px; list-style:none;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  details summary::after{content:"▾"; color:var(--dim); transition:transform .2s;}
+  details[open] summary::after{transform:rotate(180deg);}
+  .set-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 0; border-top:1px solid #3a4060; font-size:14px;
+  }
+  .set-row label{color:var(--text);}
+  .set-row .hint{display:block; font-size:11px; color:var(--dim); margin-top:2px;}
+  .set-row input[type=number]{
+    width:64px; padding:8px; border-radius:8px; border:1px solid #3a4060;
+    background:var(--card2); color:var(--text); font-size:15px; text-align:center;
+  }
+  .switch{position:relative; width:46px; height:26px; flex-shrink:0;}
+  .switch input{opacity:0; width:0; height:0;}
+  .switch .track{
+    position:absolute; inset:0; background:var(--card2); border-radius:13px;
+    transition:.2s; cursor:pointer;
+  }
+  .switch .track::before{
+    content:""; position:absolute; width:20px; height:20px; border-radius:50%;
+    background:#fff; top:3px; left:3px; transition:.2s;
+  }
+  .switch input:checked + .track{background:var(--accent);}
+  .switch input:checked + .track::before{left:23px;}
+  details .pad-bottom{height:8px;}
+
+  /* 備份 */
+  .backup-btns{display:flex; gap:10px;}
+  .backup-btns .btn{flex:1; background:var(--card); color:var(--text); font-size:15px;}
+  .backup-note{font-size:12px; color:var(--dim); margin-top:8px; line-height:1.6; padding:0 4px;}
+
+  #toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
+    background:#3a4060; color:#fff; padding:12px 20px; border-radius:12px;
+    font-size:14px; opacity:0; transition:all .3s; z-index:99; max-width:90%;
+    box-shadow:0 4px 20px rgba(0,0,0,.4); text-align:center;
+  }
+  #toast.show{transform:translateX(-50%) translateY(0); opacity:1;}
+  footer{margin-top:24px; font-size:11px; color:var(--dim); text-align:center; line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>🍅 番茄專注鐘</h1></header>
+
+  <div class="modes">
+    <button id="tabFocus" onclick="switchMode('focus',true)">專注</button>
+    <button id="tabShort" onclick="switchMode('short',true)">短休息</button>
+    <button id="tabLong" onclick="switchMode('long',true)">長休息</button>
+  </div>
+
+  <div class="timer-card" id="timerCard">
+    <div id="phaseLabel">準備開始專注</div>
+    <div id="time">25:00</div>
+    <div id="roundLabel"></div>
+    <div class="timer-btns">
+      <button class="btn sub" onclick="resetTimer()">重設</button>
+      <button class="btn" id="startBtn" onclick="toggleTimer()">開始</button>
+      <button class="btn sub" onclick="skipPhase()">跳過</button>
+    </div>
+  </div>
+
+  <section>
+    <h2>🎧 白噪音(點一下播放,再點一下停止)</h2>
+    <div class="sounds">
+      <div class="sound" id="snd-rain" onclick="toggleSound('rain')">
+        <div class="icon">🌧️</div><div class="name">雨聲</div><div class="state">停止中</div>
+      </div>
+      <div class="sound" id="snd-ocean" onclick="toggleSound('ocean')">
+        <div class="icon">🌊</div><div class="name">海浪</div><div class="state">停止中</div>
+      </div>
+      <div class="sound" id="snd-cafe" onclick="toggleSound('cafe')">
+        <div class="icon">☕</div><div class="name">咖啡廳</div><div class="state">停止中</div>
+      </div>
+    </div>
+    <div class="vol-row">
+      <span>🔉</span>
+      <input type="range" id="volSlider" min="0" max="100" value="60" oninput="setVolume(this.value)">
+      <span>🔊</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>📊 專注統計</h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="num" id="statToday">0 <small>顆</small></div><div class="label">今日番茄(<span id="statTodayMin">0</span> 分鐘)</div></div>
+      <div class="stat"><div class="num" id="statWeek">0 <small>分鐘</small></div><div class="label">最近 7 天專注</div></div>
+      <div class="stat"><div class="num" id="statTotal">0 <small>顆</small></div><div class="label">累計番茄</div></div>
+      <div class="stat"><div class="num" id="statStreak">0 <small>天</small></div><div class="label">連續專注天數</div></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">最近 14 天每日專注分鐘數</div>
+      <div class="chart" id="chart"></div>
+      <div class="chart-days" id="chartDays"></div>
+    </div>
+  </section>
+
+  <section>
+    <details>
+      <summary>⚙️ 設定</summary>
+      <div class="set-row"><label>專注時長(分鐘)</label><input type="number" id="setWork" min="1" max="120" onchange="saveSettings()"></div>
+      <div class="set-row"><label>短休息(分鐘)</label><input type="number" id="setShort" min="1" max="60" onchange="saveSettings()"></div>
+      <div class="set-row"><label>長休息(分鐘)</label><input type="number" id="setLong" min="1" max="90" onchange="saveSettings()"></div>
+      <div class="set-row"><label>每幾輪進入長休息</label><input type="number" id="setEvery" min="2" max="10" onchange="saveSettings()"></div>
+      <div class="set-row">
+        <label>休息結束自動開始專注</label>
+        <div class="switch"><input type="checkbox" id="setAutoWork" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoWork').click()"></div></div>
+      </div>
+      <div class="set-row">
+        <label>專注結束自動開始休息</label>
+        <div class="switch"><input type="checkbox" id="setAutoBreak" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoBreak').click()"></div></div>
+      </div>
+      <div class="set-row">
+        <label>計時中螢幕保持常亮<span class="hint">避免手機自動熄滅螢幕讓計時中斷</span></label>
+        <div class="switch"><input type="checkbox" id="setWake" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setWake').click()"></div></div>
+      </div>
+      <div class="pad-bottom"></div>
+    </details>
+  </section>
+
+  <section>
+    <h2>💾 備份</h2>
+    <div class="backup-btns">
+      <button class="btn" onclick="exportBackup()">📤 匯出備份</button>
+      <button class="btn" onclick="document.getElementById('importFile').click()">📥 匯入備份</button>
+    </div>
+    <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importBackup(this)">
+    <div class="backup-note">
+      📤 匯出:把你的設定和專注紀錄存成一個檔案,收在安全的地方。<br>
+      📥 匯入:用之前匯出的檔案還原紀錄。<b>匯入會覆蓋目前的紀錄</b>,按下去之前會再跟你確認一次。
+    </div>
+  </section>
+
+  <footer>離線可用 · 資料只存在你自己的裝置裡<br>建議定期「匯出備份」保存專注紀錄</footer>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ============ 小工具 ============ */
+const $ = id => document.getElementById(id);
+function todayStr(offset=0){
+  const d = new Date(); d.setDate(d.getDate()+offset);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+let toastTimer=null;
+function toast(msg){
+  const t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2600);
+}
+
+/* ============ 資料存取 ============ */
+const DEFAULT_SETTINGS = {work:25, short:5, long:15, longEvery:4, autoStartWork:false, autoStartBreak:false, wakeLock:true, volume:60};
+let settings = {...DEFAULT_SETTINGS};
+let sessions = [];   // 完成的專注紀錄 [{d:"2026-07-10", m:25}]
+function load(){
+  try{ settings = {...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem("pomo_settings")||"{}")}; }catch(e){}
+  try{ sessions = JSON.parse(localStorage.getItem("pomo_sessions")||"[]"); }catch(e){ sessions=[]; }
+  if(!Array.isArray(sessions)) sessions=[];
+}
+function saveData(){
+  localStorage.setItem("pomo_settings", JSON.stringify(settings));
+  localStorage.setItem("pomo_sessions", JSON.stringify(sessions));
+}
+
+/* ============ 番茄鐘 ============ */
+let mode = "focus";          // focus | short | long
+let running = false;
+let endAt = 0;               // 結束時間點(毫秒)
+let remainMs = 0;            // 暫停時剩下的毫秒
+let roundCount = parseInt(localStorage.getItem("pomo_rounds")||"0",10) || 0; // 累計完成幾輪專注(用來排長休息)
+let tickTimer = null;
+
+function modeMinutes(m){ return m==="focus"?settings.work : m==="short"?settings.short : settings.long; }
+function modeName(m){ return m==="focus"?"專注" : m==="short"?"短休息" : "長休息"; }
+function modeColor(m){ return m==="focus"?"var(--focus)" : m==="short"?"var(--short)" : "var(--long)"; }
+
+function switchMode(m, manual){
+  if(manual && running){
+    if(!confirm("計時進行中,確定要切換到「"+modeName(m)+"」嗎?目前這一輪會取消不計入。")) return;
+  }
+  stopTick();
+  running=false; mode=m;
+  remainMs = modeMinutes(m)*60000;
+  document.documentElement.style.setProperty("--accent", modeColor(m));
+  ["tabFocus","tabShort","tabLong"].forEach(id=>$(id).classList.remove("active"));
+  $(m==="focus"?"tabFocus":m==="short"?"tabShort":"tabLong").classList.add("active");
+  $("phaseLabel").textContent = m==="focus" ? "準備開始專注" : "休息一下吧";
+  updateDisplay(); updateButtons(); saveTimerState(); releaseWake();
+}
+
+function toggleTimer(){
+  ensureAudioCtx(); // 順便解鎖聲音(瀏覽器規定要使用者按過按鈕才能出聲)
+  if(running){ // 暫停
+    remainMs = Math.max(0, endAt - Date.now());
+    running=false; stopTick(); releaseWake();
+  }else{ // 開始
+    if(remainMs<=0) remainMs = modeMinutes(mode)*60000;
+    endAt = Date.now() + remainMs;
+    running=true; startTick(); requestWake();
+    $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
+  }
+  updateButtons(); updateDisplay(); saveTimerState();
+}
+
+function resetTimer(){
+  stopTick(); running=false;
+  remainMs = modeMinutes(mode)*60000;
+  $("phaseLabel").textContent = mode==="focus" ? "準備開始專注" : "休息一下吧";
+  updateDisplay(); updateButtons(); saveTimerState(); releaseWake();
+}
+
+function skipPhase(){
+  if(mode==="focus" && running){
+    if(!confirm("跳過的話,這一輪專注不會計入統計,確定嗎?")) return;
+  }
+  advance(false);
+}
+
+function startTick(){ stopTick(); tickTimer=setInterval(tick,250); }
+function stopTick(){ if(tickTimer){clearInterval(tickTimer); tickTimer=null;} }
+
+function tick(){
+  const left = endAt - Date.now();
+  if(left<=0){ finishPhase(); return; }
+  remainMs=left; updateDisplay();
+}
+
+function finishPhase(){
+  stopTick(); running=false; remainMs=0; releaseWake();
+  playChime(mode==="focus");
+  if(navigator.vibrate) navigator.vibrate([200,100,200]);
+  advance(true);
+}
+
+// completed=true 代表時間自然走完;false 代表使用者按跳過
+function advance(completed){
+  stopTick(); running=false; releaseWake();
+  if(mode==="focus"){
+    if(completed){
+      roundCount++;
+      localStorage.setItem("pomo_rounds", String(roundCount));
+      sessions.push({d:todayStr(), m:settings.work});
+      saveData(); renderStats();
+      toast("🍅 完成一輪專注!休息一下吧");
+    }
+    const nextMode = (roundCount>0 && roundCount % settings.longEvery===0) ? "long" : "short";
+    switchMode(nextMode,false);
+    if(completed && settings.autoStartBreak) toggleTimer();
+  }else{
+    if(completed) toast("休息結束,回來繼續囉");
+    switchMode("focus",false);
+    if(completed && settings.autoStartWork) toggleTimer();
+  }
+}
+
+function updateDisplay(){
+  const total = Math.max(0, Math.round(remainMs/1000));
+  const mm=String(Math.floor(total/60)).padStart(2,"0"), ss=String(total%60).padStart(2,"0");
+  $("time").textContent = mm+":"+ss;
+  const inCycle = roundCount % settings.longEvery;
+  $("roundLabel").textContent = "本循環第 "+(mode==="focus"? inCycle+1 : (inCycle===0? settings.longEvery : inCycle))+" 輪 / 每 "+settings.longEvery+" 輪長休息一次";
+  document.title = running ? (mm+":"+ss+" · "+modeName(mode)+" - 番茄專注鐘") : "番茄專注鐘";
+  $("timerCard").classList.toggle("running", running);
+}
+function updateButtons(){ $("startBtn").textContent = running ? "暫停" : "開始"; }
+
+/* 計時狀態存起來:不小心重新整理頁面也能接續 */
+function saveTimerState(){
+  localStorage.setItem("pomo_timer", JSON.stringify({mode, running, endAt, remainMs}));
+}
+function restoreTimerState(){
+  let s=null;
+  try{ s=JSON.parse(localStorage.getItem("pomo_timer")||"null"); }catch(e){}
+  if(!s) { switchMode("focus",false); return; }
+  mode = ["focus","short","long"].includes(s.mode) ? s.mode : "focus";
+  switchMode(mode,false);
+  if(s.running && s.endAt > Date.now()){
+    remainMs = s.endAt - Date.now();
+    endAt = s.endAt; running=true; startTick(); requestWake();
+    $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
+  }else if(s.running && s.endAt<=Date.now()){
+    // 關頁面期間時間已走完:算完成,直接進到下一階段
+    advance(true);
+  }else if(!s.running && s.remainMs>0 && s.remainMs < modeMinutes(mode)*60000){
+    remainMs = s.remainMs;
+  }
+  updateDisplay(); updateButtons();
+}
+
+/* ============ 螢幕常亮(Wake Lock) ============ */
+let wakeLockObj=null;
+async function requestWake(){
+  if(!settings.wakeLock || !("wakeLock" in navigator)) return;
+  try{ wakeLockObj = await navigator.wakeLock.request("screen"); }catch(e){}
+}
+function releaseWake(){ if(wakeLockObj){ wakeLockObj.release().catch(()=>{}); wakeLockObj=null; } }
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState==="visible" && running) requestWake();
+});
+
+/* ============ 提示音(用程式做的鈴聲) ============ */
+let audioCtx=null, masterGain=null;
+function ensureAudioCtx(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = settings.volume/100;
+    masterGain.connect(audioCtx.destination);
+  }
+  if(audioCtx.state==="suspended") audioCtx.resume();
+}
+function playChime(isFocusEnd){
+  try{
+    ensureAudioCtx();
+    const notes = isFocusEnd ? [880,660,880] : [523,659,784]; // 專注結束/休息結束用不同音
+    notes.forEach((f,i)=>{
+      const t = audioCtx.currentTime + i*0.28;
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type="sine"; o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.5,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.6);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t); o.stop(t+0.7);
+    });
+  }catch(e){}
+}
+
+/* ============ 白噪音(全部用程式合成,不用音檔) ============ */
+let currentSound=null;   // "rain" | "ocean" | "cafe" | null
+let soundNodes=[];       // 目前在響的節點,停止時全部關掉
+let soundTimers=[];      // 排程用的計時器
+
+function makeNoiseBuffer(type){
+  const len = audioCtx.sampleRate * 2;
+  const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  if(type==="white"){
+    for(let i=0;i<len;i++) data[i]=Math.random()*2-1;
+  }else{ // brown(低沉)
+    let last=0;
+    for(let i=0;i<len;i++){
+      const w=Math.random()*2-1;
+      last=(last+0.02*w)/1.02; data[i]=last*3.5;
+    }
+  }
+  return buf;
+}
+function noiseSource(type){
+  const src=audioCtx.createBufferSource();
+  src.buffer=makeNoiseBuffer(type); src.loop=true;
+  return src;
+}
+function reg(node){ soundNodes.push(node); return node; }
+
+function startRain(){
+  // 持續的雨:白噪音 + 濾波,加一點緩慢起伏
+  const src=reg(noiseSource("white"));
+  const lp=reg(audioCtx.createBiquadFilter()); lp.type="lowpass"; lp.frequency.value=6500;
+  const hp=reg(audioCtx.createBiquadFilter()); hp.type="highpass"; hp.frequency.value=350;
+  const g=reg(audioCtx.createGain()); g.gain.value=0.42;
+  const lfo=reg(audioCtx.createOscillator()); lfo.frequency.value=0.25;
+  const lfoG=reg(audioCtx.createGain()); lfoG.gain.value=0.06;
+  lfo.connect(lfoG); lfoG.connect(g.gain);
+  src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(masterGain);
+  src.start(); lfo.start();
+}
+function startOcean(){
+  // 海浪:低沉噪音,音量像波浪一樣慢慢起伏
+  const src=reg(noiseSource("brown"));
+  const lp=reg(audioCtx.createBiquadFilter()); lp.type="lowpass"; lp.frequency.value=650;
+  const g=reg(audioCtx.createGain()); g.gain.value=0.55;
+  const lfo=reg(audioCtx.createOscillator()); lfo.frequency.value=0.07;   // 一波約 14 秒
+  const lfoG=reg(audioCtx.createGain()); lfoG.gain.value=0.35;
+  lfo.connect(lfoG); lfoG.connect(g.gain);
+  const lfo2=reg(audioCtx.createOscillator()); lfo2.frequency.value=0.05; // 濾波也跟著波動
+  const lfo2G=reg(audioCtx.createGain()); lfo2G.gain.value=250;
+  lfo2.connect(lfo2G); lfo2G.connect(lp.frequency);
+  src.connect(lp); lp.connect(g); g.connect(masterGain);
+  src.start(); lfo.start(); lfo2.start();
+}
+function startCafe(){
+  // 咖啡廳:低頻環境聲 + 模糊人聲感 + 偶爾的杯盤輕響
+  const rumble=reg(noiseSource("brown"));
+  const rLp=reg(audioCtx.createBiquadFilter()); rLp.type="lowpass"; rLp.frequency.value=420;
+  const rG=reg(audioCtx.createGain()); rG.gain.value=0.4;
+  rumble.connect(rLp); rLp.connect(rG); rG.connect(masterGain);
+  rumble.start();
+
+  const murmur=reg(noiseSource("white"));
+  const bp=reg(audioCtx.createBiquadFilter()); bp.type="bandpass"; bp.frequency.value=800; bp.Q.value=1.4;
+  const mG=reg(audioCtx.createGain()); mG.gain.value=0.16;
+  const wander=reg(audioCtx.createOscillator()); wander.frequency.value=0.06;
+  const wanderG=reg(audioCtx.createGain()); wanderG.gain.value=350;
+  wander.connect(wanderG); wanderG.connect(bp.frequency);
+  murmur.connect(bp); bp.connect(mG); mG.connect(masterGain);
+  murmur.start(); wander.start();
+
+  function clink(){
+    if(currentSound!=="cafe") return;
+    try{
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+      o.type="triangle"; o.frequency.value=1600+Math.random()*1200;
+      const t=audioCtx.currentTime;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.05+Math.random()*0.04,t+0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.15);
+      o.connect(g); g.connect(masterGain); o.start(t); o.stop(t+0.2);
+    }catch(e){}
+    soundTimers.push(setTimeout(clink, 3000+Math.random()*7000));
+  }
+  soundTimers.push(setTimeout(clink, 2000));
+}
+
+function stopSound(){
+  soundTimers.forEach(t=>clearTimeout(t)); soundTimers=[];
+  soundNodes.forEach(n=>{ try{n.stop&&n.stop();}catch(e){} try{n.disconnect();}catch(e){} });
+  soundNodes=[]; currentSound=null;
+  document.querySelectorAll(".sound").forEach(el=>{
+    el.classList.remove("playing"); el.querySelector(".state").textContent="停止中";
+  });
+}
+function toggleSound(name){
+  ensureAudioCtx();
+  const wasPlaying = (currentSound===name);
+  stopSound();
+  if(wasPlaying) return; // 再點一次同一個 = 停止
+  currentSound=name;
+  if(name==="rain") startRain();
+  else if(name==="ocean") startOcean();
+  else startCafe();
+  const el=$("snd-"+name);
+  el.classList.add("playing"); el.querySelector(".state").textContent="播放中";
+}
+function setVolume(v){
+  settings.volume=parseInt(v,10);
+  if(masterGain) masterGain.gain.value=settings.volume/100;
+  saveData();
+}
+
+/* ============ 統計 ============ */
+function renderStats(){
+  const today=todayStr();
+  const byDay={};
+  sessions.forEach(s=>{ byDay[s.d]=(byDay[s.d]||0)+s.m; });
+  const countByDay={};
+  sessions.forEach(s=>{ countByDay[s.d]=(countByDay[s.d]||0)+1; });
+
+  $("statToday").innerHTML=(countByDay[today]||0)+" <small>顆</small>";
+  $("statTodayMin").textContent=byDay[today]||0;
+
+  let week=0;
+  for(let i=0;i>-7;i--) week+=byDay[todayStr(i)]||0;
+  $("statWeek").innerHTML=week+" <small>分鐘</small>";
+  $("statTotal").innerHTML=sessions.length+" <small>顆</small>";
+
+  // 連續天數:從今天(或昨天)往回數,每天都有至少 1 顆
+  let streak=0, start=(countByDay[today]?0:-1);
+  for(let i=start;;i--){
+    if(countByDay[todayStr(i)]) streak++; else break;
+    if(streak>3650) break;
+  }
+  $("statStreak").innerHTML=streak+" <small>天</small>";
+
+  // 最近 14 天長條圖
+  const chart=$("chart"), days=$("chartDays");
+  chart.innerHTML=""; days.innerHTML="";
+  let max=1;
+  const vals=[];
+  for(let i=-13;i<=0;i++){ const v=byDay[todayStr(i)]||0; vals.push(v); if(v>max)max=v; }
+  vals.forEach((v,idx)=>{
+    const bar=document.createElement("div");
+    bar.className="bar"+(v>0?" has":"");
+    bar.style.height=Math.max(3, Math.round(v/max*100))+"%";
+    bar.title=todayStr(idx-13)+":"+v+" 分鐘";
+    chart.appendChild(bar);
+    const d=document.createElement("div");
+    d.textContent=todayStr(idx-13).slice(8); // 只顯示「日」
+    days.appendChild(d);
+  });
+}
+
+/* ============ 匯出/匯入備份 ============ */
+function exportBackup(){
+  const data={app:"pomodoro-whitenoise", version:1, exportedAt:new Date().toISOString(),
+              settings, sessions, roundCount};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="番茄鐘備份_"+todayStr()+".json";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+  toast("✅ 已匯出備份檔,請收好這個檔案");
+}
+function importBackup(input){
+  const file=input.files[0]; input.value="";
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    let data=null;
+    try{ data=JSON.parse(reader.result); }catch(e){}
+    if(!data || data.app!=="pomodoro-whitenoise" || !Array.isArray(data.sessions)){
+      alert("這個檔案不是番茄鐘的備份檔,沒有做任何變更。\n請確認你選的是之前用「匯出備份」存下來的檔案。");
+      return;
+    }
+    const ok=confirm("備份檔內容:\n・專注紀錄 "+data.sessions.length+" 筆\n・匯出日期:"+(data.exportedAt||"未知").slice(0,10)
+      +"\n\n匯入會【覆蓋】目前裝置上的紀錄("+sessions.length+" 筆),確定要匯入嗎?");
+    if(!ok) return;
+    sessions=data.sessions;
+    settings={...DEFAULT_SETTINGS, ...(data.settings||{})};
+    roundCount=parseInt(data.roundCount,10)||0;
+    localStorage.setItem("pomo_rounds", String(roundCount));
+    saveData(); applySettingsToUI(); renderStats(); switchMode(mode,false);
+    toast("✅ 匯入完成!紀錄已還原");
+  };
+  reader.readAsText(file);
+}
+
+/* ============ 設定 ============ */
+function applySettingsToUI(){
+  $("setWork").value=settings.work; $("setShort").value=settings.short;
+  $("setLong").value=settings.long; $("setEvery").value=settings.longEvery;
+  $("setAutoWork").checked=settings.autoStartWork;
+  $("setAutoBreak").checked=settings.autoStartBreak;
+  $("setWake").checked=settings.wakeLock;
+  $("volSlider").value=settings.volume;
+  if(masterGain) masterGain.gain.value=settings.volume/100;
+}
+function saveSettings(){
+  const clamp=(v,lo,hi,dv)=>{v=parseInt(v,10); return isNaN(v)?dv:Math.min(hi,Math.max(lo,v));};
+  settings.work=clamp($("setWork").value,1,120,25);
+  settings.short=clamp($("setShort").value,1,60,5);
+  settings.long=clamp($("setLong").value,1,90,15);
+  settings.longEvery=clamp($("setEvery").value,2,10,4);
+  settings.autoStartWork=$("setAutoWork").checked;
+  settings.autoStartBreak=$("setAutoBreak").checked;
+  settings.wakeLock=$("setWake").checked;
+  saveData(); applySettingsToUI();
+  if(!running){ remainMs=modeMinutes(mode)*60000; updateDisplay(); }
+}
+
+/* ============ 啟動 ============ */
+load();
+applySettingsToUI();
+renderStats();
+restoreTimerState();
+
+// 離線快取(只有放到網路上時才需要;直接開檔案用不到也不會出錯)
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
