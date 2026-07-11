@@ -520,6 +520,8 @@
           <div class="switch"><input type="checkbox" id="setMood" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setMood').click()"></div></div></div>
         <div class="set-row"><label>顯示每日一句</label>
           <div class="switch"><input type="checkbox" id="setQuote" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setQuote').click()"></div></div></div>
+        <div class="set-row"><label>計時結束跳出系統通知<span class="hint">在背景或其他 App 時也看得到,第一次開啟會詢問權限</span></label>
+          <div class="switch"><input type="checkbox" id="setNotify" onchange="toggleNotify(this)"><div class="track" onclick="document.getElementById('setNotify').click()"></div></div></div>
       </div>
     </section>
     <section>
@@ -556,6 +558,65 @@
           1. 健康提醒和計時<b>要在網頁開著的時候</b>才會運作,建議搭配「螢幕保持常亮」使用。<br>
           2. 手機可以用瀏覽器的「加入主畫面」把它變成 App。<br>
           3. 所有紀錄只存在你這台裝置上,<b>換裝置或清瀏覽器資料前,記得先「匯出備份」</b>。
+        </div>
+      </details>
+    </section>
+    <section>
+      <h2>📖 實用建議</h2>
+      <details class="help">
+        <summary>😴 睡眠要用哪種聲音?</summary>
+        <div class="help-body">
+          <b>首選:🌸 粉紅噪音</b>——比白噪音低沉柔和,有研究發現它可能讓睡眠更穩定,是「助眠聲音」裡最常被推薦的。<br><br>
+          <b>也很適合:</b>🌧️ 雨聲、🌊 海浪、🦗 夏夜蟲鳴——穩定、沒有突發聲音,而且是大腦熟悉的「安全的大自然聲」。<br><br>
+          <b>睡覺時避免:</b>🐦 鳥鳴(大腦會覺得是白天)、☕ 咖啡廳(人聲會不自覺吸引注意力)、⛈️ 遠雷(偶爾的雷聲可能把你吵醒)。<br><br>
+          <b>三個訣竅:</b><br>
+          1. 音量開到「比舒服再小一點」,能蓋過環境雜音就好,太大聲反而干擾睡眠。<br>
+          2. 一定搭配「😴 睡眠定時」設 30~60 分鐘——它會慢慢變小聲再停止,不會整夜播放。<br>
+          3. 白噪音對「環境吵」最有效(馬路聲、鄰居聲);如果你的房間本來就很安靜,不開其實睡得更好。
+        </div>
+      </details>
+      <details class="help">
+        <summary>🎯 工作/學習要怎麼搭配白噪音?</summary>
+        <div class="help-body">
+          先講最重要的觀念:<b>白噪音的功能是「蓋掉會打斷你的雜音」,不是越聽越聰明</b>。所以:<br><br>
+          <b>環境吵雜</b>(辦公室、咖啡店、家人看電視)→ 開,效果最明顯。推薦 🌫️ 白噪音、🌧️ 雨聲。<br>
+          <b>環境很安靜</b> → 可以不開,安靜本身就是最好的專注環境。覺得「太安靜反而不安」再開小聲的。<br><br>
+          <b>依任務類型挑聲音:</b><br>
+          ・背單字、閱讀、記憶類 → 選「沒有事件感」的:🌫️ 白噪音、🌸 粉紅噪音、🌧️ 雨聲、🏞️ 溪流(咖啡廳的人聲對背誦類最容易造成干擾)。<br>
+          ・寫東西、想點子、創意類 → ☕ 咖啡廳這種「適度的微雜音」對一部分人反而有幫助,可以試試。<br>
+          ・整理檔案、做家事類 → 隨便挑你喜歡的,🚆 火車的規律節奏很多人愛。<br><br>
+          <b>兩個進階技巧:</b><br>
+          1. <b>固定用同一種聲音開工</b>:大腦會被制約,聽到那個聲音就自動進入「該專心了」的狀態。<br>
+          2. <b>用數據找答案</b>:開啟「記錄專注度」,開聲音做幾輪、不開做幾輪,到統計頁看哪種狀態「很專注」比較多——你自己的數據比任何研究都準。<br><br>
+          最後提醒:讀書時不要聽有歌詞的音樂,語言會跟你正在讀的文字搶大腦資源——白噪音的優勢就是「沒有內容」。
+        </div>
+      </details>
+      <details class="help">
+        <summary>⏱ 專注和休息設多長最有效?</summary>
+        <div class="help-body">
+          沒有對每個人都最好的長度,但有幾個有依據的參考點:<br><br>
+          <b>25 / 5(經典番茄)</b>:最適合新手、容易分心的人、瑣碎任務。「只要撐 25 分鐘」的低門檻就是它最大的優點。<br>
+          <b>50 / 10</b>:適合已經習慣專注、做需要「進入狀況」的深度工作(寫作、寫報告、讀原文書)。25 分鐘對這類任務常常「才剛熱起來就被打斷」。<br>
+          <b>52 / 17</b>:有個追蹤上班族電腦使用的統計(DeskTime)發現,生產力最高的一群人平均工作 52 分鐘、休息 17 分鐘。<br>
+          <b>90 分鐘是上限</b>:人的精力天然以約 90 分鐘為一個週期起伏,連續專注超過 90 分鐘效率會明顯下滑,不建議設更長。<br><br>
+          <b>調整原則(很簡單):</b><br>
+          ・常常「時間到了正順手」→ 加長 10~15 分鐘。<br>
+          ・常常「撐不到結束就分心」→ 縮短,先求完成再求長度。<br>
+          ・已經進入心流不想被鈴聲打斷 → 改用「正計時模式」,做多久記多久。<br><br>
+          <b>休息的重點:</b>短休息 5~10 分鐘,但要<b>離開螢幕才算休息</b>(滑手機不算!站起來、喝水、看遠方);每 3~4 輪休一次長的 15~30 分鐘。休息不是浪費時間,是讓下一輪維持高效的必要成本。
+        </div>
+      </details>
+      <details class="help">
+        <summary>📱 可以在背景執行嗎?(安卓/電腦)</summary>
+        <div class="help-body">
+          可以,但有條件,先看結論:<br><br>
+          <b>🤖 安卓手機(建議先「加入主畫面」):</b><br>
+          ・<b>有開白噪音時</b>:鎖屏、切到其他 App,聲音和計時都會繼續走,時間到照樣響鈴——因為手機不會關掉「正在播聲音」的程式。這是最可靠的背景模式,想背景用就開個小聲的聲音。<br>
+          ・<b>沒開白噪音時</b>:手機省電機制會讓網頁「打盹」,鈴聲可能延遲響。但別擔心——<b>時間絕對不會算錯</b>,回到 App 的瞬間會自動補上結果。建議開啟「計時結束跳出系統通知」(在上面的小功能開關),通知在背景也會跳出來。<br>
+          ・在 App 裡使用時,開著「螢幕保持常亮」最省事。<br><br>
+          <b>💻 電腦:</b><br>
+          ・分頁放背景、切到其他視窗都沒問題,計時照走,分頁標題會顯示倒數,通知也會跳。<br><br>
+          <b>唯一不行的:</b>把 App 完全關掉/從最近使用清單滑掉——計時就停了。不過重新打開時,如果時間已經走完,會自動算完成並記錄,不會漏掉。
         </div>
       </details>
     </section>
@@ -660,7 +721,7 @@ function fmtMs(ms){
 const DEFAULT_SETTINGS = {
   work:25, short:5, long:15, longEvery:4,
   autoStartWork:false, autoStartBreak:false, wakeLock:true, volume:60,
-  countUp:false, moodLog:true, microEx:true, dailyQuote:true,
+  countUp:false, moodLog:true, microEx:true, dailyQuote:true, notify:false,
   health:{
     water:{on:false,min:45}, sit:{on:false,min:50}, eye:{on:false,min:20},
     stand:{on:false,min:60}, caffeine:{on:false,time:"14:00"}, bed:{on:false,time:"23:00"}
@@ -812,7 +873,41 @@ function finishPhase(){
   stopTick(); running=false; remainMs=0; releaseWake();
   playChime(mode==="focus");
   if(navigator.vibrate) navigator.vibrate([200,100,200]);
+  notifyPhaseEnd(mode==="focus");
   advance(true, mode==="focus"?settings.work:0);
+}
+
+/* ============ 系統通知(背景也看得到) ============ */
+async function ensureNotifyPermission(){
+  if(!("Notification" in window)) return false;
+  if(Notification.permission==="granted") return true;
+  if(Notification.permission==="denied") return false;
+  try{ return (await Notification.requestPermission())==="granted"; }catch(e){ return false; }
+}
+async function toggleNotify(cb){
+  if(cb.checked){
+    const ok=await ensureNotifyPermission();
+    if(!ok){
+      cb.checked=false;
+      toast("瀏覽器沒有允許通知權限,開不起來。請在網址列旁的設定允許「通知」後再試");
+    }
+  }
+  settings.notify=cb.checked; saveData();
+  if(cb.checked) toast("✅ 之後計時結束會跳系統通知");
+}
+function notifyPhaseEnd(isFocusEnd){
+  if(!settings.notify || !("Notification" in window) || Notification.permission!=="granted") return;
+  const title=isFocusEnd?"🍅 專注結束!":"⏰ 休息結束!";
+  const body=isFocusEnd?"做得好,起來動一動、休息一下吧":"回來繼續下一輪囉";
+  const opts={body, icon:"icon-192.png", badge:"icon-192.png", tag:"pomo-phase", renotify:true, vibrate:[200,100,200]};
+  if("serviceWorker" in navigator){
+    navigator.serviceWorker.getRegistration().then(reg=>{
+      if(reg && reg.showNotification) reg.showNotification(title,opts);
+      else new Notification(title,opts);
+    }).catch(()=>{ try{new Notification(title,opts);}catch(e){} });
+  }else{
+    try{new Notification(title,opts);}catch(e){}
+  }
 }
 
 // completed=時間走完或按「完成」;minutes=要記錄的專注分鐘數
@@ -1699,6 +1794,7 @@ function applySettingsToUI(){
   $("setMicro").checked=settings.microEx;
   $("setMood").checked=settings.moodLog;
   $("setQuote").checked=settings.dailyQuote;
+  $("setNotify").checked=settings.notify && ("Notification" in window) && Notification.permission==="granted";
   $("cuToggle").checked=settings.countUp;
   $("volSlider").value=settings.volume;
   if(masterGain) masterGain.gain.value=settings.volume/100;
