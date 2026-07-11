@@ -21,8 +21,8 @@
 | 夏夜蟲鳴 (night/summer-night) | Lisa Redfern | Public Domain |
 | 風聲 (wind) | felix.blume | CC0 |
 | 火車 (train) | SDLx | CC BY 3.0 |
-
-白噪音、粉紅噪音為 Web Audio 程式產生,無音檔。
+| 白噪音 (white) | Jorge Stolfi | CC BY-SA |
+| 粉紅噪音 (pink) | Omegatron | CC BY-SA |
 - 功能:番茄鐘(可自訂時長/長休息/正計時)、白噪音混音器、任務清單、專注統計與熱力圖、健康提醒(喝水/久坐/護眼/咖啡因/就寢)、呼吸練習、伸展引導、睡眠定時、匯出/匯入備份
 
 線上版:https://zaker353.github.io/pomodoro/

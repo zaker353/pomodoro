@@ -547,7 +547,7 @@
           <b>混音器用法:</b>每種聲音點一下開、再點一下關,可以同時開好幾種、各自調音量,疊出自己喜歡的氛圍,再按「存目前組合」收藏起來。<br><br>
           聲音是真實環境錄音,第一次載入過後就存在裝置裡,離線也能播。<br><br>
           <b>音效出處(感謝以下創作者):</b><br>
-          雨聲 by alex36917(CC BY)、海浪 by Luftrum(CC BY)、遠雷 by Digifish music(CC BY)、火車 by SDLx(CC BY 3.0)、咖啡廳 by stephan(公有領域)、火堆 by ezwa(公有領域)、溪流 by gluckose(CC0)、鳥鳴 by kvgarlic(CC0)、夏夜蟲鳴 by Lisa Redfern(公有領域)、風聲 by felix.blume(CC0),取自 Blanket 開源專案整理的音效庫;白噪音、粉紅噪音為程式產生。
+          雨聲 by alex36917(CC BY)、海浪 by Luftrum(CC BY)、遠雷 by Digifish music(CC BY)、火車 by SDLx(CC BY 3.0)、咖啡廳 by stephan(公有領域)、火堆 by ezwa(公有領域)、溪流 by gluckose(CC0)、鳥鳴 by kvgarlic(CC0)、夏夜蟲鳴 by Lisa Redfern(公有領域)、風聲 by felix.blume(CC0)、白噪音 by Jorge Stolfi(CC BY-SA)、粉紅噪音 by Omegatron(CC BY-SA),取自 Blanket 開源專案整理的音效庫。
         </div>
       </details>
       <details class="help">
@@ -976,13 +976,13 @@ const SOUND_DEFS={
   white:{icon:"🌫️", name:"白噪音"},
   pink:{icon:"🌸", name:"粉紅噪音"}
 };
-// 真實環境音檔(出處與授權見 README / 說明頁);讀不到時退回程式合成
-// 白噪音/粉紅噪音沒有音檔:本來就是數學噪音,直接程式產生
+// 真實音檔(出處與授權見 README / 說明頁);讀不到時退回程式合成
 const SOUND_FILES={
   rain:"sounds/rain.mp3", ocean:"sounds/ocean.mp3", cafe:"sounds/cafe.mp3",
   fire:"sounds/fire.mp3", thunder:"sounds/thunder.mp3",
   stream:"sounds/stream.mp3", birds:"sounds/birds.mp3", night:"sounds/night.mp3",
-  wind:"sounds/wind.mp3", train:"sounds/train.mp3"
+  wind:"sounds/wind.mp3", train:"sounds/train.mp3",
+  white:"sounds/white.mp3", pink:"sounds/pink.mp3"
 };
 let mixOn={}, mixVol={rain:60,ocean:60,cafe:60,fire:60,thunder:60,stream:60,birds:60,night:60,wind:60,train:60,white:60,pink:60};
 let sndNodes={}, sndTimers={}, sndGain={};
