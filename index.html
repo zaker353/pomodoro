@@ -537,6 +537,12 @@
           <div class="switch"><input type="checkbox" id="hWaterOn" onchange="saveHealth()"><div class="track" onclick="document.getElementById('hWaterOn').click()"></div></div>
         </div>
         <div class="h-row">
+          <span class="h-icon">🥤</span>
+          <div class="h-main">今日喝水:<b id="waterToday">0/8 杯</b><div class="h-sub">提醒跳出時按「我喝了」,或在這裡手動+1</div></div>
+          <input type="number" id="hWaterGoal" min="1" max="20" onchange="saveHealth()" title="每日目標杯數"><span class="h-unit">杯</span>
+          <button class="tbtn" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:8px 12px;cursor:pointer;font-family:inherit" onclick="addWater()">＋1</button>
+        </div>
+        <div class="h-row">
           <span class="h-icon">🧍</span>
           <div class="h-main">久坐提醒<div class="h-sub">站起來動一動、伸展一下</div></div>
           <input type="number" id="hSitMin" min="10" max="240" onchange="saveHealth()"><span class="h-unit">分</span>
@@ -573,15 +579,19 @@
       <div class="action-cards">
         <button class="action-card" onclick="openBreath()">
           <div class="ai">🫁</div><div class="an">呼吸練習</div>
-          <div class="ad">4-7-8 呼吸法<br>跟著圓圈吸氣吐氣</div>
+          <div class="ad">三種呼吸法:助眠、<br>鎮定、快速減壓</div>
         </button>
         <button class="action-card" onclick="openStretch()">
-          <div class="ai">🤸</div><div class="an">頸肩手腕伸展</div>
-          <div class="ad">8 個動作跟著做<br>約 2 分鐘</div>
+          <div class="ai">🤸</div><div class="an">伸展運動</div>
+          <div class="ad">頸肩手腕/眼部/下背<br>三套跟著做</div>
         </button>
-        <button class="action-card" onclick="openNap()" style="grid-column:1/-1">
+        <button class="action-card" onclick="openEye()">
+          <div class="ai">👀</div><div class="an">護眼 20 秒</div>
+          <div class="ad">看遠方 20 秒倒數<br>眼睛立刻放鬆</div>
+        </button>
+        <button class="action-card" onclick="openNap()">
           <div class="ai">😴</div><div class="an">午睡充電</div>
-          <div class="ad">10~30 分鐘小睡,搭配助眠聲,時間到用溫柔漸強的鈴聲叫醒你</div>
+          <div class="ad">小睡+助眠聲<br>溫柔漸強鈴聲喚醒</div>
         </button>
       </div>
     </section>
@@ -659,7 +669,11 @@
           ・成就徽章:累積顆數、連續天數、早鳥夜貓等 16 種等你解鎖。<br><br>
           <b>💚 健康頁</b><br>
           ・六種提醒:喝水/久坐/20-20-20護眼/坐站交替/咖啡因截止/就寢。<br>
-          ・呼吸練習(4-7-8)、頸肩手腕伸展引導、午睡充電(溫柔鬧鈴)。<br><br>
+          ・喝水量記錄:提醒跳出按「我喝了+1」,追蹤今日喝了幾杯、目標可調。<br>
+          ・護眼 20 秒:跟著倒數看遠方,護眼提醒也會附「開始」按鈕。<br>
+          ・呼吸練習三種:4-7-8(助眠)、箱式(鎮定)、生理性嘆息(快速減壓)。<br>
+          ・伸展三套:頸肩手腕、眼部放鬆、下背腰部。<br>
+          ・午睡充電(溫柔漸強鬧鈴)。<br><br>
           <b>⚙️ 設定頁</b><br>
           ・時長、每日目標、鈴聲重複次數、嚴格模式、白噪音跟著計時、自動開始、螢幕常亮、淺色主題、系統通知、備份。<br><br>
           <b>⌨️ 電腦快捷鍵</b>:空白鍵=開始/暫停、1/2/3=切換專注/短休/長休、F=全螢幕時鐘。
@@ -793,17 +807,36 @@
 
 <!-- 呼吸練習 -->
 <div class="overlay" id="breathOv">
-  <h3>🫁 4-7-8 呼吸練習</h3>
-  <div class="ov-dim">跟著圓圈:吸氣 4 秒 → 屏息 7 秒 → 吐氣 8 秒</div>
+  <h3>🫁 呼吸練習</h3>
+  <div class="nap-opts" id="breathMethods">
+    <button class="ov-close" style="margin-top:0; padding:10px 14px; font-size:13px" onclick="startBreathMethod('v478')">😴 4-7-8<br><small style="color:var(--dim)">助眠放鬆</small></button>
+    <button class="ov-close" style="margin-top:0; padding:10px 14px; font-size:13px" onclick="startBreathMethod('box')">🧊 箱式呼吸<br><small style="color:var(--dim)">鎮定安神</small></button>
+    <button class="ov-close" style="margin-top:0; padding:10px 14px; font-size:13px" onclick="startBreathMethod('sigh')">😮‍💨 生理性嘆息<br><small style="color:var(--dim)">快速減壓</small></button>
+  </div>
+  <div class="ov-dim" id="breathDesc">選一種呼吸法開始</div>
   <div id="breathCircle"></div>
   <div id="breathPhase">準備…</div>
   <div id="breathCount"></div>
   <button class="ov-close" onclick="closeBreath()">結束</button>
 </div>
 
+<!-- 護眼 20 秒 -->
+<div class="overlay" id="eyeOv">
+  <h3>👀 護眼 20 秒</h3>
+  <div class="ov-dim">看向至少 6 公尺遠的地方(窗外最好)<br>順便多眨眨眼、讓眼睛濕潤</div>
+  <div id="eyeSec" style="font-size:72px; font-weight:bold; margin:20px 0; font-variant-numeric:tabular-nums">20</div>
+  <div id="eyeMsg" class="ov-dim"></div>
+  <button class="ov-close" onclick="closeEye()">關閉</button>
+</div>
+
 <!-- 伸展引導 -->
 <div class="overlay" id="stretchOv">
-  <h3>🤸 頸肩手腕伸展</h3>
+  <h3 id="stretchTitle">🤸 伸展運動</h3>
+  <div class="nap-opts" id="stretchChoose">
+    <button class="ov-close" style="margin-top:0; padding:10px 14px; font-size:13px" onclick="startStretchRoutine('neck')">💪 頸肩手腕<br><small style="color:var(--dim)">打電腦必備</small></button>
+    <button class="ov-close" style="margin-top:0; padding:10px 14px; font-size:13px" onclick="startStretchRoutine('eye')">👀 眼部放鬆<br><small style="color:var(--dim)">盯螢幕救星</small></button>
+    <button class="ov-close" style="margin-top:0; padding:10px 14px; font-size:13px" onclick="startStretchRoutine('back')">🧘 下背腰部<br><small style="color:var(--dim)">久坐剋星</small></button>
+  </div>
   <div class="ov-dim" id="stretchStep"></div>
   <div id="stretchEmoji"></div>
   <div id="stretchName"></div>
@@ -891,6 +924,7 @@
 <div id="remBanner">
   <span class="ri" id="remIcon">💧</span>
   <span class="rt" id="remText"></span>
+  <button id="remAction" style="display:none; background:var(--accent); color:#fff"></button>
   <button onclick="hideRem()">知道了</button>
 </div>
 
@@ -923,7 +957,7 @@ const DEFAULT_SETTINGS = {
   countUp:false, moodLog:true, microEx:true, dailyQuote:true, notify:false,
   followTimer:false, breakSound:"keep", dailyGoal:8, strict:false, chimeRepeat:1, theme:"dark",
   health:{
-    water:{on:false,min:45}, sit:{on:false,min:50}, eye:{on:false,min:20},
+    water:{on:false,min:45,goal:8}, sit:{on:false,min:50}, eye:{on:false,min:20},
     stand:{on:false,min:60}, caffeine:{on:false,time:"14:00"}, bed:{on:false,time:"23:00"}
   }
 };
@@ -2110,67 +2144,141 @@ function showMicro(){
   card.style.display="block";
 }
 
-/* ============ 呼吸練習(4-7-8) ============ */
-const BREATH_PHASES=[{n:"吸氣",s:4,sc:1},{n:"屏息",s:7,sc:1},{n:"吐氣",s:8,sc:0.45}];
-let breathOpen=false, breathTimerId=null;
+/* ============ 呼吸練習(三種方法) ============ */
+const BREATH_METHODS={
+  v478:{name:"4-7-8 呼吸", desc:"跟著圓圈:吸氣 4 秒 → 屏息 7 秒 → 吐氣 8 秒。放鬆神經、幫助入睡。", cycles:4,
+    phases:[{n:"吸氣",s:4,sc:1},{n:"屏息",s:7,sc:1},{n:"吐氣",s:8,sc:0.45}]},
+  box:{name:"箱式呼吸", desc:"吸 4 → 屏 4 → 吐 4 → 屏 4,像畫一個正方形。考前、緊張時最能鎮定。", cycles:6,
+    phases:[{n:"吸氣",s:4,sc:1},{n:"屏息",s:4,sc:1},{n:"吐氣",s:4,sc:0.45},{n:"屏息",s:4,sc:0.45}]},
+  sigh:{name:"生理性嘆息", desc:"快速吸一口、再補吸一小口,然後長長吐掉。研究顯示是最快速的減壓法。", cycles:5,
+    phases:[{n:"吸氣",s:2,sc:0.85},{n:"再補吸一口",s:1,sc:1},{n:"長長吐氣",s:6,sc:0.45}]}
+};
+let breathOpen=false, breathTimerId=null, breathMethod=null;
 function openBreath(){
-  $("breathOv").classList.add("open"); breathOpen=true;
+  $("breathOv").classList.add("open"); breathOpen=true; breathMethod=null;
+  clearTimeout(breathTimerId);
+  $("breathDesc").textContent="選一種呼吸法開始";
+  $("breathPhase").textContent="準備…";
+  $("breathCount").textContent="";
+  $("breathCircle").style.transition="transform .5s";
+  $("breathCircle").style.transform="scale(.45)";
+}
+function startBreathMethod(key){
+  breathMethod=BREATH_METHODS[key];
+  clearTimeout(breathTimerId);
+  $("breathDesc").textContent=breathMethod.desc;
   runBreath(0,0);
 }
 function runBreath(cycle,phaseIdx){
-  if(!breathOpen) return;
-  if(cycle>=4){
+  if(!breathOpen||!breathMethod) return;
+  const m=breathMethod;
+  if(cycle>=m.cycles){
     $("breathPhase").textContent="完成 🎉 感覺好多了嗎?";
-    $("breathCount").textContent="";
+    $("breathCount").textContent="還想再來一輪就再點上面的按鈕";
     $("breathCircle").style.transform="scale(.45)";
+    playDing();
     return;
   }
-  const p=BREATH_PHASES[phaseIdx];
+  const p=m.phases[phaseIdx];
   $("breathPhase").textContent=p.n+" "+p.s+" 秒";
-  $("breathCount").textContent="第 "+(cycle+1)+" / 4 輪";
+  $("breathCount").textContent=m.name+" · 第 "+(cycle+1)+" / "+m.cycles+" 輪";
   const c=$("breathCircle");
   c.style.transition="transform "+p.s+"s "+(p.n==="屏息"?"steps(1,end)":"ease-in-out");
   c.style.transform="scale("+p.sc+")";
   breathTimerId=setTimeout(()=>{
     const next=phaseIdx+1;
-    if(next>=BREATH_PHASES.length) runBreath(cycle+1,0);
+    if(next>=m.phases.length) runBreath(cycle+1,0);
     else runBreath(cycle,next);
   },p.s*1000);
 }
 function closeBreath(){
-  breathOpen=false; clearTimeout(breathTimerId);
+  breathOpen=false; breathMethod=null; clearTimeout(breathTimerId);
   $("breathOv").classList.remove("open");
   $("breathCircle").style.transform="scale(.45)";
 }
 
-/* ============ 伸展引導 ============ */
-const STRETCH_STEPS=[
-  {e:"🙆",n:"頸部右傾",d:"右耳慢慢往右肩靠,感覺左邊脖子被拉開",s:15},
-  {e:"🙆",n:"頸部左傾",d:"左耳慢慢往左肩靠,感覺右邊脖子被拉開",s:15},
-  {e:"🙇",n:"低頭伸展",d:"下巴往胸口收,雙手輕輕放在後腦勺",s:15},
-  {e:"🔄",n:"肩膀繞圈",d:"肩膀往後慢慢繞大圈,越大圈越好",s:20},
-  {e:"💪",n:"聳肩放鬆",d:"肩膀用力聳起停 3 秒再放鬆,重複做",s:20},
-  {e:"🤚",n:"手腕伸展(右)",d:"右手臂伸直、掌心朝上,左手把手指輕輕往下扳",s:15},
-  {e:"🤚",n:"手腕伸展(左)",d:"左手臂伸直、掌心朝上,右手把手指輕輕往下扳",s:15},
-  {e:"✊",n:"握拳張開",d:"用力握拳再五指用力張開,重複做",s:15}
-];
-let stretchIdx=0, stretchLeft=0, stretchTimerId=null;
+/* ============ 護眼 20 秒 ============ */
+let eyeTimerId=null, eyeLeft=20;
+function openEye(){
+  $("eyeOv").classList.add("open");
+  eyeLeft=20;
+  $("eyeSec").textContent=eyeLeft;
+  $("eyeMsg").textContent="";
+  clearInterval(eyeTimerId);
+  eyeTimerId=setInterval(()=>{
+    eyeLeft--;
+    $("eyeSec").textContent=Math.max(0,eyeLeft);
+    if(eyeLeft<=0){
+      clearInterval(eyeTimerId); eyeTimerId=null;
+      $("eyeSec").textContent="✅";
+      $("eyeMsg").textContent="完成!眼睛放鬆多了,回去繼續吧";
+      playDing();
+    }
+  },1000);
+}
+function closeEye(){
+  clearInterval(eyeTimerId); eyeTimerId=null;
+  $("eyeOv").classList.remove("open");
+}
+
+/* ============ 伸展引導(三套動作) ============ */
+const STRETCH_ROUTINES={
+  neck:{title:"💪 頸肩手腕伸展", finish:"肩頸和手腕舒服多了,回去繼續加油", steps:[
+    {e:"🙆",n:"頸部右傾",d:"右耳慢慢往右肩靠,感覺左邊脖子被拉開",s:15},
+    {e:"🙆",n:"頸部左傾",d:"左耳慢慢往左肩靠,感覺右邊脖子被拉開",s:15},
+    {e:"🙇",n:"低頭伸展",d:"下巴往胸口收,雙手輕輕放在後腦勺",s:15},
+    {e:"🔄",n:"肩膀繞圈",d:"肩膀往後慢慢繞大圈,越大圈越好",s:20},
+    {e:"💪",n:"聳肩放鬆",d:"肩膀用力聳起停 3 秒再放鬆,重複做",s:20},
+    {e:"🤚",n:"手腕伸展(右)",d:"右手臂伸直、掌心朝上,左手把手指輕輕往下扳",s:15},
+    {e:"🤚",n:"手腕伸展(左)",d:"左手臂伸直、掌心朝上,右手把手指輕輕往下扳",s:15},
+    {e:"✊",n:"握拳張開",d:"用力握拳再五指用力張開,重複做",s:15}
+  ]},
+  eye:{title:"👀 眼部放鬆", finish:"眼睛保養完成,記得平常多眨眼", steps:[
+    {e:"🙈",n:"掌心敷眼",d:"雙手搓熱,輕輕蓋住閉起的眼睛,感受溫熱",s:15},
+    {e:"😉",n:"用力眨眼",d:"眼睛緊閉 2 秒再張大,重複做",s:15},
+    {e:"👀",n:"上下看",d:"頭不動,眼睛慢慢看上面、再看下面",s:15},
+    {e:"👀",n:"左右看",d:"頭不動,眼睛慢慢看左邊、再看右邊",s:15},
+    {e:"🔄",n:"繞圈看",d:"眼睛順時針慢慢繞一大圈,再逆時針繞",s:20},
+    {e:"🏔",n:"遠近切換",d:"看遠方 5 秒、看自己指尖 5 秒,來回交替",s:20}
+  ]},
+  back:{title:"🧘 下背腰部伸展", finish:"腰背鬆開了,坐姿記得挺一點", steps:[
+    {e:"🧍",n:"站起來",d:"離開椅子,雙腳與肩同寬站好",s:5},
+    {e:"🙆",n:"雙手舉高後仰",d:"手臂伸直向上延伸,輕輕往後仰",s:15},
+    {e:"🙇",n:"體前彎",d:"膝蓋微彎,上半身放鬆慢慢往下垂,手自然下垂",s:15},
+    {e:"🔄",n:"腰部畫圈",d:"雙手叉腰,骨盆慢慢畫圈,兩個方向都做",s:20},
+    {e:"↔️",n:"身體側彎",d:"一手叉腰、一手舉高往側邊彎,左右各做一半時間",s:20},
+    {e:"🐱",n:"拱背弓背",d:"雙手扶膝,背拱起再下凹,像貓伸懶腰",s:20}
+  ]}
+};
+let stretchSteps=[], stretchFinishMsg="", stretchIdx=0, stretchLeft=0, stretchTimerId=null;
 function openStretch(){
   $("stretchOv").classList.add("open");
+  clearInterval(stretchTimerId);
+  $("stretchTitle").textContent="🤸 伸展運動";
+  $("stretchChoose").style.display="flex";
+  $("stretchStep").textContent="選一套動作開始";
+  $("stretchEmoji").textContent="🤸";
+  $("stretchName").textContent=""; $("stretchDesc").textContent=""; $("stretchSec").textContent="";
+}
+function startStretchRoutine(key){
+  const r=STRETCH_ROUTINES[key]; if(!r) return;
+  stretchSteps=r.steps; stretchFinishMsg=r.finish;
+  $("stretchTitle").textContent=r.title;
+  $("stretchChoose").style.display="none";
   stretchIdx=0; startStretchStep();
 }
 function startStretchStep(){
   clearInterval(stretchTimerId);
-  if(stretchIdx>=STRETCH_STEPS.length){
+  if(stretchIdx>=stretchSteps.length){
     $("stretchStep").textContent="";
     $("stretchEmoji").textContent="🎉";
     $("stretchName").textContent="全部完成!";
-    $("stretchDesc").textContent="肩頸和手腕舒服多了,回去繼續加油";
+    $("stretchDesc").textContent=stretchFinishMsg;
     $("stretchSec").textContent="";
     return;
   }
-  const st=STRETCH_STEPS[stretchIdx];
-  $("stretchStep").textContent="第 "+(stretchIdx+1)+" / "+STRETCH_STEPS.length+" 個動作";
+  const st=stretchSteps[stretchIdx];
+  $("stretchStep").textContent="第 "+(stretchIdx+1)+" / "+stretchSteps.length+" 個動作";
   $("stretchEmoji").textContent=st.e;
   $("stretchName").textContent=st.n;
   $("stretchDesc").textContent=st.d;
@@ -2182,7 +2290,7 @@ function startStretchStep(){
     if(stretchLeft<=0){ playDing(); stretchIdx++; startStretchStep(); }
   },1000);
 }
-function stretchNext(){ stretchIdx++; startStretchStep(); }
+function stretchNext(){ if(stretchSteps.length) { stretchIdx++; startStretchStep(); } }
 function closeStretch(){
   clearInterval(stretchTimerId);
   $("stretchOv").classList.remove("open");
@@ -2284,22 +2392,51 @@ function scheduleRem(key){
   else delete remNext[key];
 }
 function scheduleAllRems(){ Object.keys(REM_DEFS).forEach(scheduleRem); }
-let remHideId=null;
-function fireRem(icon,text){
+let remHideId=null, remActionFn=null;
+function fireRem(icon,text,actionLabel,actionFn){
   $("remIcon").textContent=icon;
   $("remText").textContent=text;
+  const ab=$("remAction");
+  if(actionLabel && actionFn){
+    ab.textContent=actionLabel; ab.style.display="";
+    remActionFn=actionFn;
+    ab.onclick=()=>{ const f=remActionFn; hideRem(); if(f) f(); };
+  }else{
+    ab.style.display="none"; remActionFn=null;
+  }
   $("remBanner").classList.add("show");
   clearTimeout(remHideId);
-  remHideId=setTimeout(hideRem,15000);
+  remHideId=setTimeout(hideRem,20000);
   playDing();
   if(navigator.vibrate) navigator.vibrate(200);
 }
 function hideRem(){ $("remBanner").classList.remove("show"); }
+
+/* 喝水量記錄 */
+let waterLog={};
+try{ waterLog=JSON.parse(localStorage.getItem("pomo_water")||"{}")||{}; }catch(e){ waterLog={}; }
+function addWater(){
+  const t=todayStr();
+  waterLog[t]=(waterLog[t]||0)+1;
+  // 只留最近 60 天,避免越存越肥
+  Object.keys(waterLog).forEach(k=>{ if(k<todayStr(-60)) delete waterLog[k]; });
+  localStorage.setItem("pomo_water",JSON.stringify(waterLog));
+  renderWater();
+  const goal=settings.health.water.goal||8;
+  if(waterLog[t]===goal) toast("🎉 今日喝水達標 "+goal+" 杯,身體謝謝你!");
+  else toast("💧 今日第 "+waterLog[t]+" 杯,繼續保持");
+}
+function renderWater(){
+  const goal=settings.health.water.goal||8;
+  $("waterToday").textContent=(waterLog[todayStr()]||0)+"/"+goal+" 杯";
+}
 function checkReminders(){
   const now=Date.now();
   for(const key in REM_DEFS){
     if(remNext[key] && now>=remNext[key]){
-      fireRem(REM_DEFS[key].icon, REM_DEFS[key].msg);
+      if(key==="water") fireRem(REM_DEFS.water.icon, REM_DEFS.water.msg, "我喝了 ＋1", addWater);
+      else if(key==="eye") fireRem(REM_DEFS.eye.icon, REM_DEFS.eye.msg, "開始 20 秒", openEye);
+      else fireRem(REM_DEFS[key].icon, REM_DEFS[key].msg);
       remNext[key]=now+settings.health[key].min*60000;
       break; // 一次只跳一個,避免同時疊很多
     }
@@ -2320,7 +2457,7 @@ function checkReminders(){
 }
 function saveHealth(){
   const clampN=(v,lo,hi,dv)=>{v=parseInt(v,10); return isNaN(v)?dv:Math.min(hi,Math.max(lo,v));};
-  settings.health.water={on:$("hWaterOn").checked, min:clampN($("hWaterMin").value,10,240,45)};
+  settings.health.water={on:$("hWaterOn").checked, min:clampN($("hWaterMin").value,10,240,45), goal:clampN($("hWaterGoal").value,1,20,8)};
   settings.health.sit={on:$("hSitOn").checked, min:clampN($("hSitMin").value,10,240,50)};
   settings.health.eye={on:$("hEyeOn").checked, min:clampN($("hEyeMin").value,10,120,20)};
   settings.health.stand={on:$("hStandOn").checked, min:clampN($("hStandMin").value,15,240,60)};
@@ -2331,6 +2468,8 @@ function saveHealth(){
 function applyHealthToUI(){
   const h=settings.health;
   $("hWaterOn").checked=h.water.on; $("hWaterMin").value=h.water.min;
+  $("hWaterGoal").value=h.water.goal||8;
+  renderWater();
   $("hSitOn").checked=h.sit.on; $("hSitMin").value=h.sit.min;
   $("hEyeOn").checked=h.eye.on; $("hEyeMin").value=h.eye.min;
   $("hStandOn").checked=h.stand.on; $("hStandMin").value=h.stand.min;
@@ -2342,7 +2481,7 @@ function applyHealthToUI(){
 function exportBackup(){
   localStorage.setItem("pomo_lastexport", todayStr());
   const data={app:"pomodoro-whitenoise", version:3, exportedAt:new Date().toISOString(),
-    settings, sessions, roundCount, tasks, activeTask, favMixes, mixVol, presets, focusMix};
+    settings, sessions, roundCount, tasks, activeTask, favMixes, mixVol, presets, focusMix, waterLog};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
@@ -2384,6 +2523,8 @@ function applyImport(data){
   if(data.mixVol) for(const k in data.mixVol) if(SOUND_DEFS[k]) mixVol[k]=data.mixVol[k];
   presets=(Array.isArray(data.presets)&&data.presets.length)?data.presets:JSON.parse(JSON.stringify(DEFAULT_PRESETS));
   focusMix=data.focusMix||null;
+  waterLog=(data.waterLog&&typeof data.waterLog==="object")?data.waterLog:{};
+  localStorage.setItem("pomo_water",JSON.stringify(waterLog));
   saveData();
   applySettingsToUI(); applyHealthToUI(); applyTheme(); renderTasks(); renderStats();
   renderSoundGrid(); renderFavs(); renderQuote(); renderPresets(); scheduleAllRems();
