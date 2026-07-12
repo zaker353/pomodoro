@@ -803,7 +803,7 @@
           ・效期(Expiration)建議選長一點,到期了再來換一次。<br>
           4. 按 Generate 後<b>馬上複製</b>那串金鑰(離開頁面就看不到了),回來貼到上面的欄位。<br><br>
           <b>安全性:</b>金鑰只存在這台裝置,不會跟著「匯出備份」流出;它只能動那個備份倉庫,動不了你 GitHub 的其他東西。每台裝置都要各貼一次。<br><br>
-          <b>日常用法:</b>手機用完按「上傳備份」→ 電腦打開按「下載並合併」,兩邊紀錄就同步了。「下載並覆蓋」只有新裝置第一次還原時才用。
+          <b>日常用法:</b>設定完成後<b>什麼都不用做</b>——「⚡ 全自動同步」預設開啟:每次打開 App 自動從雲端下載合併,紀錄有變動後約 90 秒自動上傳,切到別的 App 時也會盡力上傳一次。手動三顆按鈕隨時可用;「下載並覆蓋」只有新裝置第一次還原時才用。
         </div>
       </details>
     </section>
@@ -1021,6 +1021,7 @@ function saveData(){
   localStorage.setItem("pomo_mixvol", JSON.stringify(mixVol));
   localStorage.setItem("pomo_presets", JSON.stringify(presets));
   if(focusMix) localStorage.setItem("pomo_focusmix", JSON.stringify(focusMix));
+  if(typeof ghMarkDirty==="function") ghMarkDirty(); // 資料有變 → 排程自動上傳
 }
 
 /* ============ 分頁切換 ============ */
@@ -2451,6 +2452,7 @@ function addWater(){
   // 只留最近 60 天,避免越存越肥
   Object.keys(waterLog).forEach(k=>{ if(k<todayStr(-60)) delete waterLog[k]; });
   localStorage.setItem("pomo_water",JSON.stringify(waterLog));
+  if(typeof ghMarkDirty==="function") ghMarkDirty();
   renderWater();
   const goal=settings.health.water.goal||8;
   if(waterLog[t]===goal) toast("🎉 今日喝水達標 "+goal+" 杯,身體謝謝你!");
@@ -2655,11 +2657,79 @@ function mergeBackup(data){
   saveData();
   renderTasks(); renderStats(); renderFavs(); renderPresets(); renderWater();
 }
+/* ⚡ 全自動同步:開 App 自動「下載並合併」;資料變更後 90 秒自動「上傳」;
+   切到別的 App/分頁時也盡力上傳一次。離線或失敗都安靜跳過,手動按鈕照常可用。 */
+const GH_AUTO_KEY="pomo_ghsync_auto", GH_STATUS_KEY="pomo_ghsync_status";
+function ghAutoEnabled(){ return localStorage.getItem(GH_AUTO_KEY)!=="off"; } // 預設開
+function ghSetAuto(on){
+  localStorage.setItem(GH_AUTO_KEY, on?"on":"off");
+  ghRender();
+  toast(on?"⚡ 自動同步已開啟":"自動同步已關閉,之後請手動按「上傳備份」");
+}
+function ghRecordStatus(s){
+  try{ localStorage.setItem(GH_STATUS_KEY, JSON.stringify(s)); }catch(e){}
+  ghUpdateStatusLine();
+}
+function ghLastStatus(){
+  try{ return JSON.parse(localStorage.getItem(GH_STATUS_KEY)||"null"); }catch(e){ return null; }
+}
+function ghUpdateStatusLine(){
+  const el=$("ghAutoStatus"); if(!el) return;
+  const s=ghLastStatus();
+  if(!s){ el.textContent=""; return; }
+  const t=new Date(s.at).toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"});
+  el.textContent="上次自動同步:"+t+" "+(s.action==="upload"?"上傳":"下載")+(s.ok?" ✅":" ❌ "+(s.msg||""));
+}
+let ghDirty=false, ghAutoBusy=false, ghUploadTimer=null;
+const GH_UPLOAD_DEBOUNCE=90000; // 最後一次變更後 90 秒才上傳,使用中不會狂傳
+function ghMarkDirty(){
+  if(!loadGh()||!ghAutoEnabled()) return;
+  ghDirty=true;
+  clearTimeout(ghUploadTimer);
+  ghUploadTimer=setTimeout(ghAutoUpload, GH_UPLOAD_DEBOUNCE);
+}
+async function ghAutoUpload(){
+  if(!ghDirty||ghAutoBusy) return;
+  const cfg=loadGh(); if(!cfg||!ghAutoEnabled()) return;
+  if(typeof navigator!=="undefined" && navigator.onLine===false) return;
+  ghAutoBusy=true;
+  try{
+    await ghUpload();
+    ghDirty=false;
+    ghRecordStatus({at:Date.now(), ok:true, action:"upload"});
+  }catch(e){
+    ghRecordStatus({at:Date.now(), ok:false, action:"upload", msg:e.message});
+  }
+  ghAutoBusy=false;
+}
+async function ghAutoDownload(){
+  const cfg=loadGh(); if(!cfg||!ghAutoEnabled()) return;
+  if(typeof navigator!=="undefined" && navigator.onLine===false) return;
+  ghAutoBusy=true;
+  try{
+    const data=await ghDownload();
+    const before=sessions.length;
+    mergeBackup(data);
+    ghRecordStatus({at:Date.now(), ok:true, action:"download"});
+    if(sessions.length>before) toast("☁️ 已自動同步:從雲端合併了 "+(sessions.length-before)+" 筆紀錄");
+  }catch(e){
+    // 雲端還沒有備份檔是正常情況(第一次用),不當作錯誤
+    if(!String(e.message).includes("還沒有"))
+      ghRecordStatus({at:Date.now(), ok:false, action:"download", msg:e.message});
+  }
+  ghAutoBusy=false;
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="hidden") ghAutoUpload();
+});
 let ghBusy=false;
 function ghStatus(msg){ const el=$("ghStatus"); if(el) el.textContent=msg; }
 async function ghDoUpload(){
   if(ghBusy) return; ghBusy=true; ghStatus("⏳ 上傳中…");
-  try{ await ghUpload(); ghStatus("✅ 上傳完成!雲端備份已更新("+new Date().toLocaleTimeString("zh-TW")+")"); }
+  try{
+    await ghUpload(); ghDirty=false;
+    ghStatus("✅ 上傳完成!雲端備份已更新("+new Date().toLocaleTimeString("zh-TW")+")");
+  }
   catch(e){ ghStatus("❌ "+e.message); }
   ghBusy=false;
 }
@@ -2718,10 +2788,16 @@ function ghRender(){
       +'<button class="btn" style="background:var(--card2);color:var(--text)" onclick="ghDoOverwrite()">⬇️ 下載並覆蓋(新裝置用)</button>'
       +'</div>'
       +'<div id="ghStatus" style="font-size:12px;color:var(--dim);margin-top:10px;line-height:1.6"></div>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:13px">'
+      +'<span>⚡ 全自動同步<span style="display:block;font-size:11px;color:var(--dim)">開App自動下載合併;紀錄變更後約90秒自動上傳</span></span>'
+      +'<div class="switch"><input type="checkbox" id="ghAutoCb" '+(ghAutoEnabled()?"checked":"")+' onchange="ghSetAuto(this.checked)"><div class="track" onclick="document.getElementById(\'ghAutoCb\').click()"></div></div>'
+      +'</div>'
+      +'<div id="ghAutoStatus" style="font-size:11px;color:var(--dim);margin-top:6px"></div>'
       +'<div style="display:flex;gap:8px;margin-top:10px">'
       +'<button style="flex:1;background:none;border:1px solid var(--line);color:var(--dim);border-radius:10px;padding:8px;cursor:pointer;font-family:inherit;font-size:12px" onclick="ghRenderEdit()">✏️ 修改設定</button>'
       +'<button style="flex:1;background:none;border:1px solid var(--line);color:var(--dim);border-radius:10px;padding:8px;cursor:pointer;font-family:inherit;font-size:12px" onclick="ghClearConfig()">🗑 清除設定</button>'
       +'</div>';
+    ghUpdateStatusLine();
   }
 }
 function ghRenderEdit(){
@@ -2790,6 +2866,7 @@ scheduleAllRems();
 setInterval(checkReminders,20000);
 checkWeekReport();
 ghRender();
+ghAutoDownload(); // 有設定+開啟自動同步時,開 App 自動下載合併
 // 備份提醒:紀錄多了又太久沒備份,溫柔提醒一下
 (function backupNag(){
   if(sessions.length<20) return;
