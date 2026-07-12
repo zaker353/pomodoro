@@ -24,7 +24,7 @@
 | 白噪音 (white) | Jorge Stolfi | CC BY-SA |
 | 粉紅噪音 (pink) | Omegatron | CC BY-SA |
 
-圖書館(library)、鍵盤聲(keyboard)、風扇(fan)、貓咪呼嚕(cat)、雪夜風聲(snow)、時鐘滴答(clock)取自 [Moodist](https://github.com/remvze/moodist) 開源專案音效庫(音源為 CC0 或 Pixabay Content License)。
+圖書館(library)、鍵盤聲(keyboard)、風扇(fan)、貓咪呼嚕(cat)、雪夜風聲(snow)、時鐘滴答(clock)、褐色噪音(brown)、飛機艙(plane)、瀑布(falls)、烘衣機(dryer)、雨打窗(window)、頌缽(bowl)取自 [Moodist](https://github.com/remvze/moodist) 開源專案音效庫(音源為 CC0 或 Pixabay Content License)。
 - 功能:番茄鐘(可自訂時長/長休息/正計時)、白噪音混音器、任務清單、專注統計與熱力圖、健康提醒(喝水/久坐/護眼/咖啡因/就寢)、呼吸練習、伸展引導、睡眠定時、匯出/匯入備份
 
 線上版:https://zaker353.github.io/pomodoro/
