@@ -1,0 +1,12 @@
+{
+  "name": "pomodoro-whitenoise",
+  "version": "1.0.0",
+  "private": true,
+  "description": "番茄鐘+白噪音的離線專注工具(個人自用)",
+  "scripts": {
+    "test": "node tests/test-pomo.js"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
