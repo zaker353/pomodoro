@@ -1,5 +1,6 @@
 // 離線快取:第一次開啟後,之後沒網路也能用
-const CACHE = "pomo-v11";
+const CACHE_PREFIX = "pomo-";
+const CACHE = CACHE_PREFIX + "v12";
 const FILES = [
   "./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png",
   "./sounds/rain.mp3", "./sounds/ocean.mp3", "./sounds/cafe.mp3",
@@ -18,10 +19,17 @@ self.addEventListener("install", e => {
   self.skipWaiting();
 });
 
+// 清掉「自己的」舊版快取。
+// ⚠️ 一定要用前綴過濾。CacheStorage 是整個網域共用的,而 zaker353.github.io 上還有
+// 英文學習(langlearn-*)與塔羅(tarot-*)。若刪掉所有不是自己的快取,會把那兩個 App
+// 的離線功能整包清空,使用者離線時就打不開它們(2026-07-15 稽核抓到,三支都犯同一個錯)。
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(
+        keys.filter(k => k.startsWith(CACHE_PREFIX) && k !== CACHE)
+            .map(k => caches.delete(k))
+      )
     ).then(() => self.clients.claim())
   );
 });
