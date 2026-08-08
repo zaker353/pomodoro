@@ -4,9 +4,13 @@
   "private": true,
   "description": "番茄鐘+白噪音的離線專注工具(個人自用)",
   "scripts": {
-    "test": "node tests/test-pomo.js"
+    "test": "node tests/test-pomo.js",
+    "test:firefox": "node tests/test-firefox.js",
+    "test:all": "node tests/test-pomo.js && node tests/test-firefox.js"
   },
   "devDependencies": {
-    "jsdom": "^29.1.1"
+    "geckodriver": "^6.1.1",
+    "jsdom": "^29.1.1",
+    "selenium-webdriver": "^4.46.0"
   }
 }
