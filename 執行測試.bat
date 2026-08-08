@@ -13,7 +13,7 @@ if not exist "node_modules\jsdom" (
     echo.
 )
 
-node tests/test-pomo.js
+call npm test
 
 echo.
 echo ====================================

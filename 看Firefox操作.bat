@@ -17,6 +17,7 @@ if not exist "node_modules\selenium-webdriver" (
     echo.
 )
 
+node scripts/gen-audit-info.mjs
 node tests/test-firefox.js --show
 
 echo.

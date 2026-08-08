@@ -21,12 +21,14 @@ class FakeAudioContext {
   constructor(){ this.sampleRate=44100; this.state="running"; this.currentTime=0; this.destination=new FakeNode(); }
   resume(){ return Promise.resolve(); }
   createGain(){ return new FakeNode(); }
-  createOscillator(){ return new FakeNode(); }
+  createOscillator(){ FakeAudioContext.oscCount++; return new FakeNode(); }
   createBiquadFilter(){ return new FakeNode(); }
   createBufferSource(){ return new FakeNode(); }
   createBuffer(ch,len){ const arr=new Float32Array(len); return {getChannelData:()=>arr}; }
   decodeAudioData(arr, ok, err){ ok({duration:10, getChannelData:()=>new Float32Array(10)}); }
 }
+
+FakeAudioContext.oscCount = 0;
 
 const results = [];
 let failed = 0;
@@ -177,8 +179,12 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("解除嚴格模式後按鈕恢復", d.getElementById("skipBtn").style.display!=="none" && d.getElementById("resetBtn").style.display!=="none");
 
   // 5.6 鈴聲重複次數
-  E("settings.chimeRepeat=3; playChime(true); settings.chimeRepeat=1;");
-  check("鈴聲重複 3 次不出錯", true);
+  FakeAudioContext.oscCount=0; E("settings.chimeRepeat=1; playChime(true);");
+  const chime1=FakeAudioContext.oscCount;
+  FakeAudioContext.oscCount=0; E("settings.chimeRepeat=3; playChime(true);");
+  const chime3=FakeAudioContext.oscCount;
+  E("settings.chimeRepeat=1;");
+  check("鈴聲重複次數真的有效(3 倍音數)", chime1>0 && chime3===chime1*3, chime1+" → "+chime3);
 
   // 6. 混音器
   E("toggleSound('rain'); toggleSound('fire');");
@@ -395,11 +401,14 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   E("ghAutoDownload()");
   await sleep(200);
   check("開App自動下載合併", E("sessions.length")===beforeAuto+1, E("sessions.length")+" vs "+beforeAuto);
-  E("ghDirty=true");
+  // 觸發點也要驗:原本 ghDirty 是測試自己設的,把 saveData 裡的 ghMarkDirty 整個拿掉也不會紅
+  E("ghDirty=false; ghSyncedOk=true; saveData();");
+  check("資料一變更就排程自動上傳", E("ghDirty")===true);
   E("ghAutoUpload()");
   await sleep(200);
   check("自動上傳成功且清除待傳標記", JSON.parse(w.__ghFiles["pomodoro-backup.json"]).sessions.length===E("sessions.length") && E("ghDirty")===false);
-  check("同步狀態有記錄", (w.localStorage.getItem("pomo_ghsync_status")||"").includes("upload"));
+  check("同步狀態有記錄且是成功的", (()=>{ try{ const st=JSON.parse(w.localStorage.getItem("pomo_ghsync_status")); return st.ok===true && st.action==="upload"; }catch(e){ return false; } })(),
+    w.localStorage.getItem("pomo_ghsync_status"));
   check("設定畫面有自動同步開關", !!d.getElementById("ghAutoCb") && d.getElementById("ghAutoCb").checked===true);
   E("ghSetAuto(false)");
   check("可關閉自動同步", E("ghAutoEnabled()")===false);
@@ -419,15 +428,125 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   w.__v2=v2; E("applyImport(window.__v2)");
   check("匯入 v2 備份成功", E("tasks.length")===1 && E("favMixes.length")===1);
 
+  // 11.54 🩺 2026-08-09 全面稽核修掉的問題,每一條都留一個測試守著
+  //       (每一條都故意改壞驗證過會紅燈,不是裝飾)
+  E("sessions=[]; tasks=[]; favMixes=[]; presets=[]; tombs=emptyTombs(); saveData();");
+  // ① 同一小時內兩輪同長度的專注,是兩筆真紀錄,合併不可以當成重複砍掉
+  const dupCloud={app:"pomodoro-whitenoise", version:4, tasks:[], favMixes:[], presets:[], waterLog:{},
+    sessions:[{d:"2026-06-01",m:25,t:9},{d:"2026-06-01",m:25,t:9},{d:"2026-06-01",m:25,t:10}]};
+  w.__dup=dupCloud; E("mergeBackup(window.__dup)");
+  check("🩺 合併不會砍掉同一小時的第二輪專注", E("sessions.length")===3, "剩 "+E("sessions.length")+" 筆(應為 3)");
+  E("mergeBackup(window.__dup)");
+  check("🩺 重複合併也不會變多(取較大份數)", E("sessions.length")===3, "剩 "+E("sessions.length")+" 筆");
+  // ①b 同一筆紀錄後來才補欄位(上傳時還沒填專注度、回來才填),不可以變成兩筆
+  E("sessions=[{id:'sX',d:'2026-08-09',m:25,t:9,mood:2}]; tombs=emptyTombs();");
+  w.__late={app:"pomodoro-whitenoise",version:4,tasks:[],favMixes:[],presets:[],waterLog:{},
+    sessions:[{id:'sX',d:'2026-08-09',m:25,t:9}]};   // 雲端是還沒填 mood 的版本
+  E("mergeBackup(window.__late)");
+  check("🩺 同一輪紀錄後來補欄位,合併不會變成兩筆",
+    E("sessions.length")===1 && E("sessions[0].mood")===2, E("JSON.stringify(sessions)"));
+  // ② 新紀錄要有 id,否則以後還是分不出誰是誰
+  E("sessions=[]; settings.moodLog=false; switchMode('focus',false); toggleTimer(); endAt=Date.now()-100;");
+  await sleep(400);
+  check("🩺 新的專注紀錄有唯一 id", !!E("sessions[0] && sessions[0].id"), E("JSON.stringify(sessions[0])"));
+  // ③ 正計時一輪不可以記出天文數字(關著頁面回來)
+  check("🩺 一輪專注有分鐘數上限", E("MAX_SESSION_MIN")>0 && E("MAX_SESSION_MIN")<=480, "上限 "+E("MAX_SESSION_MIN"));
+  E("settings.countUp=true; switchMode('focus',false); cuActive=true; running=false; cuAccum=8*3600*1000; finishCountUp(); settings.countUp=false;");
+  check("🩺 關著頁面 8 小時不會記成 480 分鐘",
+    E("sessions[sessions.length-1].m")<=E("MAX_SESSION_MIN"), "記了 "+E("sessions[sessions.length-1].m")+" 分鐘");
+  // ④ 還沒跟雲端對過帳就絕不自動上傳(否則新裝置會用空資料蓋掉雲端)
+  // ⚠️ 前面 11.5 結尾跑過 ghClearConfig(),沒有重新設定的話 ghAutoUpload 會因為
+  //    「沒有雲端設定」提早 return,這條就變成永遠綠的假測試(第一版就是這樣寫錯的)。
+  E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'T'})); ghSetAuto(true);");
+  E("ghSyncedOk=false; ghDirty=true; ghAutoBusy=false;");
+  const beforeGuard=JSON.stringify(w.__ghFiles);
+  E("ghAutoUpload()"); await sleep(200);
+  check("🩺 沒跟雲端對過帳就不自動上傳",
+    JSON.stringify(w.__ghFiles)===beforeGuard && E("ghDirty")===true, "ghDirty="+E("ghDirty"));
+  // 對過帳之後就該正常上傳(確認防護不是把功能鎖死)
+  E("ghSyncedOk=true; ghDirty=true;"); E("ghAutoUpload()"); await sleep(200);
+  check("🩺 對過帳之後自動上傳恢復正常", E("ghDirty")===false, "ghDirty="+E("ghDirty"));
+  E("localStorage.removeItem('pomo_ghsync');");
+  // ⑤ focusMix 清成 null 要真的從 localStorage 消失
+  E("focusMix={rain:40}; saveData(); focusMix=null; saveData();");
+  check("🩺 focusMix 清空後 localStorage 也清掉", w.localStorage.getItem("pomo_focusmix")===null,
+    String(w.localStorage.getItem("pomo_focusmix")));
+  // ⑥ 常用組合的墓碑要用 id,不能用名稱(兩台很容易撞名)
+  E("favMixes=[]; tombs=emptyTombs(); saveData(); markDeleted('fav','雨聲+火堆');");
+  E("favMixes=[{id:'fOther',name:'雨聲+火堆',mix:{rain:80},createdAt:1000}];");
+  w.__fk={app:"pomodoro-whitenoise",version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},
+    tombs:E("JSON.parse(JSON.stringify(tombs))")};
+  E("mergeBackup(window.__fk)");
+  check("🩺 同名但不同 id 的音效組合不會被誤殺", E("favMixes.length")===1, E("JSON.stringify(favMixes)"));
+  // ⑦ 心情要打在指定那筆,不是陣列最後一筆
+  E("sessions=[{id:'sA',d:'2026-06-01',m:25,t:9},{id:'sB',d:'2026-06-02',m:25,t:9}]; moodTargetId='sA'; recordMood(2);");
+  check("🩺 專注度打在正確那筆(不是最後一筆)",
+    E("sessions.find(x=>x.id==='sA').mood")===2 && E("sessions.find(x=>x.id==='sB').mood")===undefined);
+  // ⑧ 按到「已經在的模式」不可以把進行中的計時清掉
+  E("settings.strict=false; switchMode('focus',false); toggleTimer();");
+  const beforeSwitch=E("running");
+  E("switchMode('focus', true)");
+  check("🩺 按到同一個模式不會清掉進行中的計時", beforeSwitch===true && E("running")===true);
+  E("resetTimer(); sessions=[]; tasks=[]; saveData();");
+  // ⑨ 兩個「時間到」的提醒同一輪撞在一起,後面的不可以無聲蓋掉前面的
+  E("settings.health.caffeine={on:true,time:'14:00'}; settings.health.bed={on:true,time:'23:00'};");
+  E("dailyFlags={}; remNext={};");
+  E("(function(){ var R=Date; window.__RealDate=R;"
+    + "window.Date=function(){ if(arguments.length) return new R(...arguments);"
+    + "  var d=new R(); d.setHours(23,30,0,0); return d; };"
+    + "window.Date.now=R.now; window.Date.prototype=R.prototype; })();");
+  E("checkReminders()");
+  const remTxt=d.getElementById("remText").textContent;
+  const flags=JSON.parse(E("JSON.stringify(dailyFlags)"));
+  check("🩺 咖啡因提醒不會被就寢提醒無聲蓋掉",
+    remTxt.includes("咖啡") && !flags.bed, "顯示的是「"+remTxt.slice(0,16)+"」/ flags="+JSON.stringify(flags));
+  E("checkReminders()");
+  check("🩺 被延後的那則下一輪會補跳", d.getElementById("remText").textContent.includes("就寢"),
+    d.getElementById("remText").textContent.slice(0,20));
+  E("window.Date=window.__RealDate; settings.health.caffeine.on=false; settings.health.bed.on=false; dailyFlags={};");
+  // ⑩ 午睡中不可以被健康提醒吵醒
+  E("hideRem(); remNext={water:Date.now()-1000}; settings.health.water={on:true,min:45,goal:8};");
+  E("document.getElementById('napOv').classList.add('open'); checkReminders();");
+  check("🩺 午睡中不會跳健康提醒",
+    !d.getElementById("remBanner").classList.contains("show"),
+    "banner show="+d.getElementById("remBanner").classList.contains("show"));
+  E("document.getElementById('napOv').classList.remove('open'); checkReminders();");
+  check("🩺 午睡結束後提醒會正常跳", d.getElementById("remBanner").classList.contains("show"));
+  E("hideRem(); settings.health.water.on=false; remNext={};");
+  // ⑪ 正計時離開太久,重開不可以繼續累加(否則按完成就是一筆假紀錄)
+  E("settings.countUp=true; saveData();");
+  E("localStorage.setItem('pomo_timer', JSON.stringify({mode:'focus',cuActive:true,running:true,"
+    + "cuStart:Date.now()-9*3600*1000,cuAccum:0,remainMs:0,endAt:0}));");
+  E("restoreTimerState()");
+  check("🩺 正計時離開 9 小時,重開不會繼續累加", E("running")===false,
+    "running="+E("running")+" / "+d.getElementById("phaseLabel").textContent);
+  E("localStorage.setItem('pomo_timer', JSON.stringify({mode:'focus',cuActive:true,running:true,"
+    + "cuStart:Date.now()-10*60*1000,cuAccum:0,remainMs:0,endAt:0}));");
+  E("restoreTimerState()");
+  check("🩺 只離開 10 分鐘會正常續算(保護沒有誤傷)", E("running")===true);
+  E("stopTick(); running=false; cuActive=false; settings.countUp=false; localStorage.removeItem('pomo_timer'); switchMode('focus',false);");
+  // ⑫ 存完雲端設定要先跟雲端對帳,不可以直接放行自動上傳
+  check("🩺 存雲端設定時會先下載對帳",
+    E("(function(){ return String(ghSaveConfig).includes('ghAutoDownload'); })()")===true);
+
   // 11.55 🔍 全面體檢計數與指令
   const auditFile = path.join(__dirname, "..", "audit-info.js");
   check("體檢計數檔存在", fs.existsSync(auditFile));
   check("體檢計數檔有被收進離線快取清單",
     fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8").includes("audit-info.js"));
+  // 使用者主要是雙擊 .bat 跑測試。.bat 若直接 node tests/xxx.js 就繞過了計數產生器,
+  // 計數永遠不會更新——CLAUDE.md 卻寫著「跑測試就會自動更新」(2026-08-09 全面稽核找到)。
+  ["執行測試.bat","Firefox實測.bat","看Firefox操作.bat"].forEach(bat=>{
+    const txt=fs.readFileSync(path.join(__dirname,"..",bat),"utf8");
+    const viaNpm=/call npm (test|run test)/.test(txt);
+    const viaGen=txt.includes("gen-audit-info.mjs");
+    check(bat+" 會更新體檢計數", viaNpm||viaGen,
+      txt.split(/\r?\n/).filter(l=>/^(node|call npm)/.test(l)).join(" ; "));
+  });
   check("App 讀得到體檢計數", E("typeof auditInfo().count")==="number" && E("auditInfo().threshold>0"));
   // 畫面顯示的數字要跟計數檔一致(不寫死數字,數字會隨改動變動)
   check("設定頁顯示的次數跟計數檔一致",
-    d.getElementById("auditCard").textContent.includes(String(E("auditInfo().count"))),
+    d.getElementById("auditCard").textContent.includes("累積 "+E("auditInfo().count")+" 次改動"),
     d.getElementById("auditCard").textContent.slice(0,60));
   // 門檻兩側都要驗:沒達標不該警告,達標才警告
   E("window.AUDIT_INFO={count:3,threshold:10,lastAuditDate:null}; renderAudit();");
@@ -442,7 +561,18 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("體檢指令有防造假條款", prompt.includes("一字不差地引用") && prompt.includes("寧可只交 3 條真的"));
   check("體檢指令有「規格可能是錯的」條款", prompt.includes("覺得我的規格哪一條是錯的"));
   check("體檢指令交代收尾要寫「全面稽核」", prompt.includes("全面稽核"));
-  check("複製功能在沒有 clipboard API 時也能用", E("typeof fallbackCopy")==="function");
+  // 真的走一次沒有 clipboard API 的路徑,驗完整指令有被送出去
+  w.__copiedText=null;
+  E("navigator.clipboard=undefined;"
+    + "document.execCommand=function(){"
+    + "  var tas=document.getElementsByTagName('textarea');"
+    + "  var ta=tas[tas.length-1]; window.__copiedText=ta&&ta.value; return true;"
+    + "};"
+    + "copyAuditPrompt();");
+  check("沒有 clipboard API 時,複製仍送出完整指令",
+    (w.__copiedText||"").includes("全面稽核") && (w.__copiedText||"").length>500,
+    "複製了 "+((w.__copiedText||"").length)+" 字");
+  check("複製後有給回饋", d.getElementById("toast").textContent.includes("已複製"));
   E("window.AUDIT_INFO=" + JSON.stringify({count:0, threshold:10, lastAuditDate:null}) + "; renderAudit();");
 
   // 11.6 🪦 刪除墓碑:刪掉的東西不可以被舊備份合併回來復活

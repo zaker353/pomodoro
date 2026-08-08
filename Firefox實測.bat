@@ -16,7 +16,7 @@ if not exist "node_modules\selenium-webdriver" (
     echo.
 )
 
-node tests/test-firefox.js
+call npm run test:firefox
 
 echo.
 echo 截圖存在 tests\screenshots\ 資料夾,可以打開來看

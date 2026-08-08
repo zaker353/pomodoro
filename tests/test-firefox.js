@@ -28,6 +28,16 @@ function check(name, cond, extra){
 const TYPES = {".html":"text/html; charset=utf-8", ".js":"text/javascript", ".json":"application/json",
   ".png":"image/png", ".mp3":"audio/mpeg", ".ico":"image/x-icon"};
 
+// 頁面裡自己攔錯誤,存進 window.__errs。加 --inject-error 參數可以故意製造一個錯誤,
+// 用來確認這個檢查真的會紅燈(不是永遠綠的裝飾)。
+const ERR_COLLECTOR = '<script>window.__errs=[];'
+  + 'window.addEventListener("error",function(e){window.__errs.push(String(e.message||e));});'
+  + 'window.addEventListener("unhandledrejection",function(e){window.__errs.push("unhandled: "+String(e.reason));});'
+  + '(function(){var o=console.error;console.error=function(){'
+  + 'window.__errs.push(Array.prototype.join.call(arguments," "));return o.apply(console,arguments);};})();'
+  + (process.argv.includes("--inject-error") ? 'setTimeout(function(){console.error("INJECTED-TEST-ERROR");},50);' : '')
+  + '</script>';
+
 function startServer(){
   return new Promise((resolve, reject) => {
     const srv = http.createServer((req,res)=>{
@@ -37,6 +47,12 @@ function startServer(){
       if(!f.startsWith(ROOT)){ res.writeHead(403); res.end(); return; }   // 別讓它讀到專案外的檔
       fs.readFile(f, (e,d)=>{
         if(e){ res.writeHead(404); res.end("not found"); return; }
+        // 由伺服器把「錯誤收集器」插在最前面。要這樣做是因為 geckodriver 不支援
+        // 讀瀏覽器主控台(實測回 HTTP method not allowed),而且插在最前面才連
+        // 載入期間的錯誤都抓得到。2026-08-09 全面稽核改。
+        if(p === "/index.html"){
+          d = Buffer.from(ERR_COLLECTOR + d.toString("utf8"), "utf8");
+        }
         res.writeHead(200, {"Content-Type": TYPES[path.extname(f)] || "application/octet-stream"});
         res.end(d);
       });
@@ -94,7 +110,9 @@ function startServer(){
     await driver.get(url);
     await driver.wait(until.elementLocated(By.id("taskInput")), 15000);
     await driver.wait(async ()=> await val("typeof addTask==='function' && typeof markDeleted==='function'"), 15000);
-    check("🦊 App 在真 Firefox 開得起來", true);
+    check("🦊 App 在真 Firefox 開得起來",
+      (await driver.findElement(By.id("time")).getText()).match(/^\d{1,2}:\d{2}$/) !== null,
+      "計時顯示 " + await driver.findElement(By.id("time")).getText());
     check("網址是本機不是線上版", (await val("location.origin")).startsWith("http://127.0.0.1"));
 
     // 這個 App 用 confirm() 問「確定刪除嗎」,自動化時先讓它一律回答「是」
@@ -192,9 +210,11 @@ function startServer(){
     const ghText = await driver.findElement(By.id("ghCard")).getText();
     check("🦊 雲端備份卡片真的顯示新說明", ghText.includes("不會再被另一台救回來"), ghText.slice(0,80));
     check("🦊 三顆按鈕都在", ghText.includes("上傳備份") && ghText.includes("下載並合併") && ghText.includes("下載並覆蓋"));
-    const cardBox = await driver.findElement(By.id("ghCard")).getRect();
-    check("🦊 說明沒把卡片擠爆版面", cardBox.width > 100 && cardBox.width <= (await val("window.innerWidth")),
-      "卡片寬 " + Math.round(cardBox.width) + " / 視窗寬 " + await val("window.innerWidth"));
+    // ⚠️ 不要驗 getRect().width <= innerWidth —— #ghCard 是 block 元素,寬度永遠等於父層,
+    //    內容再怎麼溢出都不會超過,那樣寫永遠是綠的。要驗的是「內容有沒有撐爆容器」。
+    const overflow = await val("(function(){var e=document.getElementById('ghCard');"
+      + "return e.scrollWidth - e.clientWidth;})()");
+    check("🦊 說明沒把卡片內容擠到溢出", overflow <= 2, "溢出 " + overflow + "px");
 
     /* ---------- 截圖:一定要拍到「這次改的東西」,不然截圖只是裝飾 ---------- */
     const shotDir = path.join(__dirname, "screenshots");
@@ -214,7 +234,11 @@ function startServer(){
       await val("document.documentElement.scrollWidth <= window.innerWidth + 2"),
       "內容寬 " + await val("document.documentElement.scrollWidth") + " / 畫面寬 " + await val("window.innerWidth"));
     await shoot("雲端備份說明-手機.png");
-    check("🦊 截圖有拍到雲端備份卡片", fs.existsSync(path.join(shotDir, "雲端備份說明-手機.png")));
+    const shotSize = fs.statSync(path.join(shotDir, "雲端備份說明-手機.png")).size;
+    const cardInView = await val("(function(){var r=document.getElementById('ghCard').getBoundingClientRect();"
+      + "return r.top < window.innerHeight && r.bottom > 0;})()");
+    check("🦊 截圖有拍到雲端備份卡片", shotSize > 20000 && cardInView === true,
+      "檔案 " + Math.round(shotSize/1024) + "KB / 卡片在畫面內=" + cardInView);
 
     // 假設定用完就清掉,不要留在測試設定檔裡
     await js("localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); ghRender();");
@@ -279,11 +303,12 @@ function startServer(){
       Buffer.from(await driver.takeScreenshot(), "base64"));
 
     /* ---------- 真實瀏覽器的紅字錯誤(jsdom 看不到的) ---------- */
-    let logs = [];
-    try{ logs = await driver.manage().logs().get("browser"); }catch(e){}
-    const bad = logs.filter(l => l.level && l.level.name === "SEVERE"
-      && !/favicon|sw\.js|ServiceWorker|Notification/i.test(l.message));
-    check("🦊 主控台沒有嚴重錯誤", bad.length === 0, bad.map(l=>l.message).join(" | ").slice(0,200));
+    // ⚠️ 不要用 driver.manage().logs().get("browser") —— geckodriver 不支援這個端點,
+    //    會丟 "HTTP method not allowed",被 catch 吞掉後永遠是空陣列 = 永遠綠燈
+    //    (2026-08-09 全面稽核實測)。改成在頁面裡自己攔截。
+    const pageErrs = await val("JSON.stringify(window.__errs||[])");
+    const bad = JSON.parse(pageErrs).filter(m => !/favicon|sw\.js|ServiceWorker|Notification/i.test(m));
+    check("🦊 頁面沒有噴出錯誤", bad.length === 0, bad.join(" | ").slice(0,200));
 
   } finally {
     if(driver) await driver.quit().catch(()=>{});
