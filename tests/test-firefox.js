@@ -13,6 +13,7 @@
 //        設定檔,不會動到你平常在用的那個 Firefox。
 const http = require("http");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const ROOT = path.join(__dirname, "..");
 const SHOW = process.argv.includes("--show");
@@ -54,10 +55,20 @@ function startServer(){
   const {Builder, By, until} = require("selenium-webdriver");
   const firefox = require("selenium-webdriver/firefox");
 
+  // 匯出備份的檔案要落在這裡,測完就刪
+  const dlDir = fs.mkdtempSync(path.join(os.tmpdir(), "pomo-download-"));
+
   const opts = new firefox.Options();
   if(!SHOW) opts.addArguments("-headless");
   opts.setPreference("dom.webnotifications.enabled", false);   // 別跳通知授權視窗卡住測試
   opts.setPreference("media.volume_scale", "0.0");             // 測試時不要真的出聲
+  // 使用者平常是勾「下載前先問我要存哪」,但自動化時不能跳對話框(會卡住),
+  // 所以測試時改成直接存到暫存資料夾——驗的是「匯得出正確的檔案」,
+  // 「跳不跳存檔視窗」是 Firefox 自己的設定,不歸 App 管。
+  opts.setPreference("browser.download.folderList", 2);
+  opts.setPreference("browser.download.dir", dlDir);
+  opts.setPreference("browser.download.useDownloadDir", true);
+  opts.setPreference("browser.helperApps.neverAsk.saveToDisk", "application/json");
 
   let driver;
   try{
@@ -200,6 +211,35 @@ function startServer(){
     await js("localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); ghRender();");
     check("🦊 假設定已清乾淨", await val("loadGh()===null"));
 
+    /* ---------- 匯出備份:真的按下去,真的要有檔案掉出來 ---------- */
+    // 先放一點資料進去,才驗得出「匯出的內容是對的」
+    await js(`
+      tasks=[{id:'exportX',name:'匯出測試任務',done:false,pomos:2,est:0,createdAt:1000}];
+      tombs=emptyTombs(); markDeleted('task','tombX'); saveData();
+    `);
+    await driver.findElement(By.xpath("//button[contains(., '匯出備份')]")).click();
+    // 等檔案真的「寫完」。Firefox 是先建檔再慢慢寫,一看到檔名就去讀會讀到半截,
+    // 所以要等到內容 parse 得起來為止(2026-08-08 踩過,一開始 4 項假失敗)。
+    let dlFile = null, parsed = null;
+    for(let i=0; i<40 && !parsed; i++){
+      const found = fs.readdirSync(dlDir).filter(f => f.endsWith(".json"));
+      if(found.length){
+        dlFile = path.join(dlDir, found[0]);
+        try{ parsed = JSON.parse(fs.readFileSync(dlFile, "utf8")); }catch(e){ parsed = null; }
+      }
+      if(!parsed) await driver.sleep(250);
+    }
+    check("🦊 按匯出備份,真的有檔案下載下來", !!dlFile, dlFile ? path.basename(dlFile) : "等 10 秒都沒出現");
+    if(dlFile){
+      check("🦊 檔名是看得懂的中文日期檔名", /^番茄鐘備份_\d{4}-\d{2}-\d{2}\.json$/.test(path.basename(dlFile)),
+        path.basename(dlFile));
+      check("🦊 匯出的檔案打得開、格式正確", !!parsed && parsed.app === "pomodoro-whitenoise" && parsed.version === 4);
+      check("🦊 匯出的內容真的有我的資料", !!parsed && (parsed.tasks||[]).some(t => t.id === "exportX"));
+      check("🦊 匯出的檔案有帶墓碑(否則刪除同步不到別台)", !!parsed && !!parsed.tombs && parsed.tombs.task.tombX > 0);
+      check("🦊 匯出檔案絕不含 GitHub 金鑰", !!parsed && !JSON.stringify(parsed).includes("ghsync")
+        && !JSON.stringify(parsed).toLowerCase().includes("token"));
+    }
+
     /* ---------- 順便拍一張任務頁,確認整體沒壞 ---------- */
     await driver.manage().window().setRect({width:1100, height:900});
     await driver.findElement(By.id("nav-tasks")).click();
@@ -217,6 +257,7 @@ function startServer(){
   } finally {
     if(driver) await driver.quit().catch(()=>{});
     srv.close();
+    try{ fs.rmSync(dlDir, {recursive:true, force:true}); }catch(e){}   // 清掉下載的暫存檔
   }
 
   console.log(results.join("\n"));
