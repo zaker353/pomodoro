@@ -788,6 +788,10 @@
       </div>
     </section>
     <section>
+      <h2>🔍 全面體檢</h2>
+      <div id="auditCard"></div>
+    </section>
+    <section>
       <h2>☁️ GitHub 雲端備份(手機↔電腦同步)</h2>
       <div class="set-card" id="ghCard" style="padding:14px 16px"></div>
       <details class="help" style="margin-top:12px">
@@ -953,6 +957,9 @@
 
 <div id="toast"></div>
 
+<!-- 體檢計數(自動產生,別手動改)。放外部檔是因為:寫在 index.html 裡的話,
+     更新數字本身就算一次改動,數字會永遠在追自己。 -->
+<script src="audit-info.js"></script>
 <script>
 "use strict";
 /* ============ 小工具 ============ */
@@ -2911,6 +2918,81 @@ function saveSettings(){
   if(!running){ remainMs=modeMinutes(mode)*60000; updateDisplay(); }
 }
 
+/* ============ 🔍 全面體檢提醒 ============
+   單次改動有「連動盤點」把關,但改動累積多了還是要整體檢查一次
+   (功能互相衝突、說明文字過時、新舊不一致)。數字由 audit-info.js 提供,
+   那個檔是 scripts/gen-audit-info.mjs 從 git 紀錄自動算出來的。 */
+function auditInfo(){
+  const a = (typeof window!=="undefined" && window.AUDIT_INFO) || {};
+  return {
+    count: Number.isFinite(+a.count) ? +a.count : 0,
+    threshold: (+a.threshold > 0) ? +a.threshold : 10,
+    lastAuditDate: a.lastAuditDate || null
+  };
+}
+// 標準體檢指令只有這一份。要調整檢查內容就改這裡,不要另外散落副本。
+const AUDIT_PROMPT = [
+  "請幫我的番茄鐘 App 做一次全面體檢。專案在 D:\\FORCLAUDE\\番茄鐘+白噪音APP。",
+  "",
+  "【第一步,一定要先做】",
+  "先跑 npm run test:all(jsdom 那套 + 真實 Firefox 那套),再用全庫搜尋做機械掃描。",
+  "看完結果再決定要派幾個代理、派去查什麼。能用腳本做的事不要派代理做——",
+  "用眼睛數數量、統計分佈、比對字串,這些都寫腳本。",
+  "",
+  "【要查什麼】",
+  "1. 功能互相衝突:兩個功能同時開會不會打架(例:嚴格模式 + 快捷鍵、自動同步 + 匯入覆蓋)。",
+  "2. 說明文字過時:畫面上的說明、提示、空狀態、使用說明頁那 9 篇,還符合現在的功能嗎?",
+  "3. 只改一邊:同一件事在「設定、畫面、備份欄位、合併邏輯、測試、README」有沒有漏掉哪一處。",
+  "4. 資料安全:會不會弄丟紀錄?刪除有沒有立墓碑?新欄位有沒有進 buildBackupData 和 mergeBackup?",
+  "5. 離線快取:sw.js 的 FILES 清單有沒有漏掉新檔案?清快取有沒有只刪 pomo- 開頭的?",
+  "6. 測試是不是假防護:有沒有永遠綠燈、或鎖著舊行為的測試。",
+  "",
+  "【派代理的規矩(每一份派工單都要寫進去)】",
+  "・每一條發現,都必須先用程式從檔案裡把該段原文抓出來,並在回報裡一字不差地引用;",
+  "  回報結尾附上你用來抽取的指令或腳本,讓我可以自己重跑。",
+  "  寧可只交 3 條真的,也不要交 12 條有假的。找不到問題就老實說找不到,那完全可以接受。",
+  "・如果你覺得我的規格哪一條是錯的,一定要在回報裡明說,不要為了配合它把內容改成錯的。",
+  "・回報最多 15 條、依嚴重度排序、每條 5 行內。",
+  "",
+  "【收尾】",
+  "・統籌者要逐條親自查證再修,不可以照單全收——代理的回報是線索不是結論。",
+  "・不同代理對同一件事給出不一致的判斷 = 規格有洞,要回去把規格寫死再一致套用。",
+  "・修完派獨立代理驗收,並把修掉的問題寫成自動測試(新測試要故意改壞一次,確認真的會紅燈)。",
+  "・全部做完後,commit 訊息裡一定要有「全面稽核」四個字(體檢計數靠它歸零)。"
+].join("\n");
+function renderAudit(){
+  const box=$("auditCard"); if(!box) return;
+  const a=auditInfo();
+  const due=a.count>=a.threshold;
+  box.innerHTML =
+    '<div class="backup-note" style="margin-bottom:10px'+(due?';color:var(--accent)':'')+'">'
+    + (due ? '⚠️ <b>該做一次全面體檢了</b>——' : '目前狀況:')
+    + '距離上次體檢累積 <b>'+a.count+'</b> 次改動(門檻 '+a.threshold+')。'
+    + (a.lastAuditDate ? '上次體檢:'+a.lastAuditDate+'。' : '<b>還沒做過全面體檢。</b>')
+    + '</div>'
+    + '<div class="backup-btns"><button class="btn" onclick="copyAuditPrompt()">📋 複製體檢指令</button></div>'
+    + '<div class="backup-note" style="margin-top:10px">'
+    + '改動累積多了,單看每次改動不容易發現「功能互相衝突、說明過時、新舊不一致」。'
+    + '按上面那顆複製指令,開一個新對話貼給 Claude,它就會照流程做一次整體檢查。'
+    + '</div>';
+}
+function copyAuditPrompt(){
+  const done=()=>toast("✅ 體檢指令已複製,開新對話貼上就行");
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(AUDIT_PROMPT).then(done).catch(()=>fallbackCopy(AUDIT_PROMPT,done));
+  }else fallbackCopy(AUDIT_PROMPT,done);
+}
+// file:// 開啟或舊瀏覽器沒有 clipboard API,退回老方法
+function fallbackCopy(text, done){
+  const ta=document.createElement("textarea");
+  ta.value=text; ta.style.position="fixed"; ta.style.top="-9999px";
+  document.body.appendChild(ta); ta.select();
+  let ok=false;
+  try{ ok=document.execCommand("copy"); }catch(e){}
+  document.body.removeChild(ta);
+  ok ? done() : toast("❌ 複製失敗,請改用「執行測試.bat」旁的方式");
+}
+
 /* ============ 啟動 ============ */
 load();
 applyTheme();
@@ -2927,7 +3009,18 @@ scheduleAllRems();
 setInterval(checkReminders,20000);
 checkWeekReport();
 ghRender();
+renderAudit();
 ghAutoDownload(); // 有設定+開啟自動同步時,開 App 自動下載合併
+// 累積夠多改動沒體檢過 → 提醒一次(一天最多一次,不要每次開 App 都煩)
+(function auditNag(){
+  const a=auditInfo();
+  if(a.count < a.threshold) return;
+  if(localStorage.getItem("pomo_auditnag")===todayStr()) return;
+  localStorage.setItem("pomo_auditnag",todayStr());
+  setTimeout(()=>fireRem("🔍",
+    "已經累積 "+a.count+" 次改動沒做過全面體檢了(門檻 "+a.threshold+")。到設定頁複製體檢指令,貼給 Claude 做一次整體檢查吧。",
+    "去看看", ()=>{ showPage("settings"); const c=$("auditCard"); if(c) c.scrollIntoView({block:"center"}); }), 9000);
+})();
 // 備份提醒:紀錄多了又太久沒備份,溫柔提醒一下
 (function backupNag(){
   if(sessions.length<20) return;

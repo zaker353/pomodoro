@@ -4,7 +4,7 @@
 // 想「親眼看它操作」就加參數:`node tests/test-firefox.js --show`(會跳出 Firefox 視窗)。
 //
 // 跟 test-pomo.js 的差別:
-//   test-pomo.js  = 假瀏覽器(jsdom),快、跑 136 項、每次改完都該跑。
+//   test-pomo.js  = 假瀏覽器(jsdom),快、項目多、每次改完都該跑。
 //   test-firefox.js = 真 Firefox,慢,但驗得到「真的畫得出來、真的點得到」——
 //                     jsdom 抓不到的排版跑掉、按鈕被蓋住、真實瀏覽器才有的行為。
 //
@@ -81,6 +81,15 @@ function startServer(){
     //    所以一律透過 window.eval 進到頁面自己的作用域執行。2026-08-08 踩過。
     const js  = code => driver.executeScript("window.eval(arguments[0])", code);
     const val = code => driver.executeScript("return window.eval(arguments[0])", "(" + code + ")");
+    // 底部有固定的分頁列(body 已留 86px 空間,人手動捲下去點得到),
+    // 但 selenium 是直接點元素中心、不會自己捲,位置剛好被蓋到就會 ElementClickIntercepted。
+    // 所以一律先把元素捲到畫面正中間再點。2026-08-08 踩過。
+    const clickSafely = async (locator) => {
+      const el = await driver.findElement(locator);
+      await driver.executeScript("arguments[0].scrollIntoView({block:'center'})", el);
+      await driver.sleep(200);
+      await el.click();
+    };
 
     await driver.get(url);
     await driver.wait(until.elementLocated(By.id("taskInput")), 15000);
@@ -94,7 +103,7 @@ function startServer(){
     /* ---------- 真的用鍵盤滑鼠操作:新增任務 ---------- */
     await driver.findElement(By.id("nav-tasks")).click();
     await driver.findElement(By.id("taskInput")).sendKeys("實測任務A");
-    await driver.findElement(By.xpath("//button[text()='新增']")).click();
+    await clickSafely(By.xpath("//button[text()='新增']"));
     await driver.sleep(150);
     let listText = await driver.findElement(By.id("taskList")).getText();
     check("🦊 打字新增任務,畫面真的出現", listText.includes("實測任務A"), listText.slice(0,60));
@@ -211,13 +220,35 @@ function startServer(){
     await js("localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); ghRender();");
     check("🦊 假設定已清乾淨", await val("loadGh()===null"));
 
+    /* ---------- 🔍 全面體檢:真實瀏覽器才驗得到「外部檔真的載進來了」 ---------- */
+    // jsdom 不會載入 <script src="audit-info.js">(測試裡是手動注入的),
+    // 所以「這個檔到底載不載得起來」只有真瀏覽器驗得到 —— 路徑寫錯就會在這裡爆。
+    check("🦊 體檢計數檔真的被瀏覽器載進來", await val("!!window.AUDIT_INFO && typeof window.AUDIT_INFO.count==='number'"),
+      "AUDIT_INFO=" + await val("JSON.stringify(window.AUDIT_INFO||null)"));
+    const auditText = await driver.findElement(By.id("auditCard")).getText();
+    check("🦊 設定頁真的畫出體檢區塊", auditText.includes("複製體檢指令") && /\d+ 次改動/.test(auditText),
+      auditText.slice(0,70));
+    // 真的按下複製鈕(Firefox 對 file:// 以外的來源允許寫剪貼簿)
+    await js("navigator.clipboard.writeText=(t)=>{window.__copied=t; return Promise.resolve();};");
+    await clickSafely(By.xpath("//button[contains(., '複製體檢指令')]"));
+    await driver.sleep(300);
+    const copied = await val("window.__copied||''");
+    check("🦊 按下複製鈕真的把指令送進剪貼簿", copied.length > 500 && copied.includes("全面稽核"),
+      "複製了 " + copied.length + " 個字");
+    check("🦊 複製後有給使用者回饋", (await driver.findElement(By.id("toast")).getText()).includes("已複製"),
+      await driver.findElement(By.id("toast")).getText());
+    await js("document.getElementById('auditCard').scrollIntoView({block:'center'})");
+    await driver.sleep(400);
+    fs.writeFileSync(path.join(__dirname, "screenshots", "全面體檢區塊.png"),
+      Buffer.from(await driver.takeScreenshot(), "base64"));
+
     /* ---------- 匯出備份:真的按下去,真的要有檔案掉出來 ---------- */
     // 先放一點資料進去,才驗得出「匯出的內容是對的」
     await js(`
       tasks=[{id:'exportX',name:'匯出測試任務',done:false,pomos:2,est:0,createdAt:1000}];
       tombs=emptyTombs(); markDeleted('task','tombX'); saveData();
     `);
-    await driver.findElement(By.xpath("//button[contains(., '匯出備份')]")).click();
+    await clickSafely(By.xpath("//button[contains(., '匯出備份')]"));
     // 等檔案真的「寫完」。Firefox 是先建檔再慢慢寫,一看到檔名就去讀會讀到半截,
     // 所以要等到內容 parse 得起來為止(2026-08-08 踩過,一開始 4 項假失敗)。
     let dlFile = null, parsed = null;

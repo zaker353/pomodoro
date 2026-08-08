@@ -77,6 +77,9 @@ function makeDom(presetStore){
       window.URL.createObjectURL = () => "blob:fake";
       window.URL.revokeObjectURL = () => {};
       window.HTMLAnchorElement.prototype.click = function(){ window.__lastDownload = this.download; };
+      // jsdom 預設不會去載入 <script src="audit-info.js">,所以手動把真檔內容灌進去。
+      // 用真檔而不是寫死假資料,才驗得到「產生出來的格式 App 真的吃得下」。
+      try{ window.eval(fs.readFileSync(path.join(__dirname,"..","audit-info.js"),"utf8")); }catch(e){}
       if(presetStore) Object.keys(presetStore).forEach(k=>window.localStorage.setItem(k,presetStore[k]));
     }
   });
@@ -415,6 +418,32 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   const v2 = {app:"pomodoro-whitenoise", version:2, sessions:[{d:LAST_WEEK_DAY,m:25},{d:LAST_WEEK_DAY,m:50}], settings:{work:25}, roundCount:2, tasks:[{id:"t1",name:"測試",done:false,pomos:2}], activeTask:"t1", favMixes:[{name:"雨夜",mix:{rain:60,thunder:40}}], mixVol:{rain:60}};
   w.__v2=v2; E("applyImport(window.__v2)");
   check("匯入 v2 備份成功", E("tasks.length")===1 && E("favMixes.length")===1);
+
+  // 11.55 🔍 全面體檢計數與指令
+  const auditFile = path.join(__dirname, "..", "audit-info.js");
+  check("體檢計數檔存在", fs.existsSync(auditFile));
+  check("體檢計數檔有被收進離線快取清單",
+    fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8").includes("audit-info.js"));
+  check("App 讀得到體檢計數", E("typeof auditInfo().count")==="number" && E("auditInfo().threshold>0"));
+  // 畫面顯示的數字要跟計數檔一致(不寫死數字,數字會隨改動變動)
+  check("設定頁顯示的次數跟計數檔一致",
+    d.getElementById("auditCard").textContent.includes(String(E("auditInfo().count"))),
+    d.getElementById("auditCard").textContent.slice(0,60));
+  // 門檻兩側都要驗:沒達標不該警告,達標才警告
+  E("window.AUDIT_INFO={count:3,threshold:10,lastAuditDate:null}; renderAudit();");
+  check("沒達標時不出現警告", !d.getElementById("auditCard").textContent.includes("該做一次全面體檢了"));
+  E("window.AUDIT_INFO={count:12,threshold:10,lastAuditDate:'2026-01-01'}; renderAudit();");
+  check("達標時出現警告", d.getElementById("auditCard").textContent.includes("該做一次全面體檢了"));
+  check("有做過體檢就顯示上次日期", d.getElementById("auditCard").textContent.includes("2026-01-01"));
+  check("有複製體檢指令的按鈕", d.getElementById("auditCard").innerHTML.includes("copyAuditPrompt()"));
+  // 指令內容:少了這幾句,體檢就會退化成「代理憑印象亂交報告」
+  const prompt = E("AUDIT_PROMPT");
+  check("體檢指令要求先跑機械掃描", prompt.includes("npm run test:all"));
+  check("體檢指令有防造假條款", prompt.includes("一字不差地引用") && prompt.includes("寧可只交 3 條真的"));
+  check("體檢指令有「規格可能是錯的」條款", prompt.includes("覺得我的規格哪一條是錯的"));
+  check("體檢指令交代收尾要寫「全面稽核」", prompt.includes("全面稽核"));
+  check("複製功能在沒有 clipboard API 時也能用", E("typeof fallbackCopy")==="function");
+  E("window.AUDIT_INFO=" + JSON.stringify({count:0, threshold:10, lastAuditDate:null}) + "; renderAudit();");
 
   // 11.6 🪦 刪除墓碑:刪掉的東西不可以被舊備份合併回來復活
   // (這一節每一項都刻意把墓碑機制拿掉驗證過會失敗,不是假防護)
