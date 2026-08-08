@@ -803,7 +803,8 @@
           ・效期(Expiration)建議選長一點,到期了再來換一次。<br>
           4. 按 Generate 後<b>馬上複製</b>那串金鑰(離開頁面就看不到了),回來貼到上面的欄位。<br><br>
           <b>安全性:</b>金鑰只存在這台裝置,不會跟著「匯出備份」流出;它只能動那個備份倉庫,動不了你 GitHub 的其他東西。每台裝置都要各貼一次。<br><br>
-          <b>日常用法:</b>設定完成後<b>什麼都不用做</b>——「⚡ 全自動同步」預設開啟:每次打開 App 自動從雲端下載合併,紀錄有變動後約 90 秒自動上傳,切到別的 App 時也會盡力上傳一次。手動三顆按鈕隨時可用;「下載並覆蓋」只有新裝置第一次還原時才用。
+          <b>日常用法:</b>設定完成後<b>什麼都不用做</b>——「⚡ 全自動同步」預設開啟:每次打開 App 自動從雲端下載合併,紀錄有變動後約 90 秒自動上傳,切到別的 App 時也會盡力上傳一次。手動三顆按鈕隨時可用;「下載並覆蓋」只有新裝置第一次還原時才用。<br><br>
+          <b>刪除也會同步:</b>你在手機刪掉的任務、音效組合、自訂情境,電腦同步後也會跟著消失,不會被另一台的舊備份救回來。
         </div>
       </details>
     </section>
@@ -990,6 +991,34 @@ const DEFAULT_PRESETS=[
 ];
 let settings={}, sessions=[], tasks=[], activeTask=null, favMixes=[];
 let presets=[], focusMix=null;
+
+/* ============ 🪦 刪除墓碑(跨裝置同步用) ============
+   只把東西刪掉不夠——另一台裝置的舊備份一合併,刪掉的就會復活,刪幾次都一樣。
+   所以刪除時要留一塊「墓碑」記下「什麼時候刪了什麼」,墓碑本身也跟著同步。
+   時間戳是關鍵:只記 id 分不出「舊備份送回來的(該擋)」與
+   「我刪掉之後又重新建立同名的(該放行)」——後者的 createdAt 會比墓碑晚。
+   舊資料沒有 createdAt → 視為比任何墓碑都早 → 墓碑擋得住,正是我們要的。 */
+const TOMB_KINDS=["task","fav","preset"];   // 任務 / 音效組合 / 自訂情境
+let tombs={task:{}, fav:{}, preset:{}};      // {種類:{ 識別碼: 刪除時間戳 }}
+function emptyTombs(){ return {task:{}, fav:{}, preset:{}}; }
+// 把外來的墓碑資料洗乾淨(只收正整數時間戳),避免壞掉的備份檔弄壞本機
+function sanitizeTombs(raw){
+  const out=emptyTombs();
+  if(raw && typeof raw==="object")
+    TOMB_KINDS.forEach(k=>{
+      const src=raw[k];
+      if(src && typeof src==="object")
+        for(const id in src){ const v=+src[id]; if(v>0) out[k][id]=v; }
+    });
+  return out;
+}
+function markDeleted(kind, key){ tombs[kind][String(key)]=Date.now(); }  // 之後一定要 saveData()
+// 這個東西是不是「已經被刪掉、不該再出現」?
+function isTombed(kind, key, createdAt){
+  const t=tombs[kind][String(key)];
+  if(!t) return false;
+  return !(+createdAt > t);   // 建立時間比墓碑晚 = 刪掉後又重建的,放行
+}
 function load(){
   let s={};
   try{ s=JSON.parse(localStorage.getItem("pomo_settings")||"{}")||{}; }catch(e){}
@@ -1007,9 +1036,14 @@ function load(){
     const mv=JSON.parse(localStorage.getItem("pomo_mixvol")||"{}");
     for(const k in mv) if(SOUND_DEFS[k]) mixVol[k]=mv[k];
   }catch(e){}
-  try{ presets=JSON.parse(localStorage.getItem("pomo_presets")||"null"); }catch(e){ presets=null; }
-  if(!Array.isArray(presets)||presets.length===0) presets=JSON.parse(JSON.stringify(DEFAULT_PRESETS));
+  const rawPresets=localStorage.getItem("pomo_presets");
+  let pp=null;
+  try{ pp=JSON.parse(rawPresets||"null"); }catch(e){}
+  // 只有「從沒設定過 / 資料壞掉」才給預設情境。使用者自己刪光就維持空的——
+  // 否則墓碑把它掃掉、這裡又補回來,兩邊會無限打架。
+  presets = Array.isArray(pp) ? pp : JSON.parse(JSON.stringify(DEFAULT_PRESETS));
   try{ focusMix=JSON.parse(localStorage.getItem("pomo_focusmix")||"null"); }catch(e){ focusMix=null; }
+  try{ tombs=sanitizeTombs(JSON.parse(localStorage.getItem("pomo_tombs")||"null")); }catch(e){ tombs=emptyTombs(); }
 }
 function saveData(){
   localStorage.setItem("pomo_settings", JSON.stringify(settings));
@@ -1020,6 +1054,7 @@ function saveData(){
   localStorage.setItem("pomo_favmixes", JSON.stringify(favMixes));
   localStorage.setItem("pomo_mixvol", JSON.stringify(mixVol));
   localStorage.setItem("pomo_presets", JSON.stringify(presets));
+  localStorage.setItem("pomo_tombs", JSON.stringify(tombs));
   if(focusMix) localStorage.setItem("pomo_focusmix", JSON.stringify(focusMix));
   if(typeof ghMarkDirty==="function") ghMarkDirty(); // 資料有變 → 排程自動上傳
 }
@@ -1693,7 +1728,7 @@ function renderFavs(){
     chip.innerHTML='<span>🎵 '+f.name+'</span><span class="del">✕</span>';
     chip.querySelector(".del").onclick=e=>{
       e.stopPropagation();
-      if(confirm("刪除組合「"+f.name+"」?")){ favMixes.splice(i,1); saveData(); renderFavs(); }
+      if(confirm("刪除組合「"+f.name+"」?")){ markDeleted("fav", f.name); favMixes.splice(i,1); saveData(); renderFavs(); }
     };
     chip.onclick=()=>{ applyMix(f.mix); toast("🎵 已套用「"+f.name+"」"); };
     row.appendChild(chip);
@@ -1709,7 +1744,7 @@ function saveFav(){
   const name=prompt("幫這個組合取個名字:", active.map(k=>SOUND_DEFS[k].name).join("+"));
   if(!name) return;
   const mix={}; active.forEach(k=>mix[k]=mixVol[k]);
-  favMixes.push({name:name.slice(0,20), mix});
+  favMixes.push({name:name.slice(0,20), mix, createdAt:Date.now()});
   saveData(); renderFavs();
   toast("✅ 已儲存「"+name.slice(0,20)+"」");
 }
@@ -1800,7 +1835,7 @@ function pfShowList(){
       +(p.rounds>0?(' · 自動連跑 '+p.rounds+' 輪'):'')+(mixNames?(' · '+mixNames):'')+'</div></span>';
     const eb=document.createElement("button"); eb.textContent="編輯"; eb.onclick=()=>pfEdit(i);
     const db=document.createElement("button"); db.textContent="刪除";
-    db.onclick=()=>{ if(confirm("刪除情境「"+p.name+"」?")){ presets.splice(i,1); saveData(); pfShowList(); } };
+    db.onclick=()=>{ if(confirm("刪除情境「"+p.name+"」?")){ markDeleted("preset", p.id); presets.splice(i,1); saveData(); pfShowList(); } };
     el.appendChild(eb); el.appendChild(db);
     list.appendChild(el);
   });
@@ -1814,7 +1849,7 @@ function pfEdit(i){
   $("peList").style.display="none"; $("peBtns").style.display="none"; $("peForm").style.display="block";
 }
 function pfAddNew(){
-  presets.push({id:"p"+Date.now(), icon:"⭐", name:"新情境", work:25, short:5, rounds:0, mix:null});
+  presets.push({id:"p"+Date.now(), icon:"⭐", name:"新情境", work:25, short:5, rounds:0, mix:null, createdAt:Date.now()});
   saveData(); pfEdit(presets.length-1);
 }
 function pfUpdateMixLabel(){
@@ -1848,7 +1883,7 @@ function addTask(){
   if(!name){ toast("先輸入任務名稱"); return; }
   const id="t"+Date.now()+Math.floor(Math.random()*1000);
   const est=Math.min(50,Math.max(0,parseInt($("taskEst").value,10)||0));
-  tasks.push({id, name, done:false, pomos:0, est, todayDate:null});
+  tasks.push({id, name, done:false, pomos:0, est, todayDate:null, createdAt:Date.now()});
   inp.value=""; $("taskEst").value="";
   if(!activeTask) activeTask=id;  // 第一個任務自動設為目前任務
   saveData(); renderTasks();
@@ -1879,6 +1914,7 @@ function reopenTask(id){
 function deleteTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   if(!confirm("刪除任務「"+t.name+"」?(已記錄的專注時間不會消失)")) return;
+  markDeleted("task", id);
   tasks=tasks.filter(x=>x.id!==id);
   if(activeTask===id) activeTask=null;
   saveData(); renderTasks();
@@ -2512,8 +2548,10 @@ function applyHealthToUI(){
 /* ============ 匯出/匯入備份 ============ */
 // 完整備份資料(匯出檔和雲端備份共用;「絕不」包含 GitHub 設定/金鑰)
 function buildBackupData(){
-  return {app:"pomodoro-whitenoise", version:3, exportedAt:new Date().toISOString(),
-    settings, sessions, roundCount, tasks, activeTask, favMixes, mixVol, presets, focusMix, waterLog};
+  // ⚠️ 新增欄位時,一定要同時決定它在 mergeBackup() 的合併政策(取聯集?取較新?取較大值?),
+  //    只加在這裡而忘了那裡 = 這個欄位永遠不會跨裝置同步。
+  return {app:"pomodoro-whitenoise", version:4, exportedAt:new Date().toISOString(),
+    settings, sessions, roundCount, tasks, activeTask, favMixes, mixVol, presets, focusMix, waterLog, tombs};
 }
 function exportBackup(){
   localStorage.setItem("pomo_lastexport", todayStr());
@@ -2557,8 +2595,10 @@ function applyImport(data){
   activeTask=data.activeTask||null;
   favMixes=Array.isArray(data.favMixes)?data.favMixes:[];
   if(data.mixVol) for(const k in data.mixVol) if(SOUND_DEFS[k]) mixVol[k]=data.mixVol[k];
-  presets=(Array.isArray(data.presets)&&data.presets.length)?data.presets:JSON.parse(JSON.stringify(DEFAULT_PRESETS));
+  presets=Array.isArray(data.presets)?data.presets:JSON.parse(JSON.stringify(DEFAULT_PRESETS));
   focusMix=data.focusMix||null;
+  // 「覆蓋」= 完全變成備份檔的樣子,墓碑也一起換掉(舊備份沒有 tombs 就清空)
+  tombs=sanitizeTombs(data.tombs);
   waterLog=(data.waterLog&&typeof data.waterLog==="object")?data.waterLog:{};
   localStorage.setItem("pomo_water",JSON.stringify(waterLog));
   saveData();
@@ -2631,15 +2671,25 @@ async function ghDownload(){
     throw new Error("雲端檔案不是有效的番茄鐘備份格式。");
   return data;
 }
-// 合併:兩邊紀錄都保留(取聯集),本機設定不動
+// 合併:兩邊紀錄都保留(取聯集),本機設定不動;已刪除的東西靠墓碑擋住,不會復活
 function mergeBackup(data){
+  // ① 先合併墓碑(取聯集;同一個東西被兩台都刪過就取比較晚的那次)。
+  //    要在過濾之前做,才擋得住「這台還不知道、對方剛剛刪掉」的東西。
+  const incoming=sanitizeTombs(data.tombs);
+  TOMB_KINDS.forEach(k=>{
+    for(const id in incoming[k])
+      if(incoming[k][id] > (tombs[k][id]||0)) tombs[k][id]=incoming[k][id];
+  });
+  // ② 專注紀錄:取聯集(沒有刪除功能,所以不需要墓碑)
   const seen=new Set(sessions.map(s=>JSON.stringify(s)));
   (data.sessions||[]).forEach(s=>{
     const k=JSON.stringify(s);
     if(!seen.has(k)){ seen.add(k); sessions.push(s); }
   });
   sessions.sort((a,b)=>a.d<b.d?-1:1);
+  // ③ 任務:取聯集,但跳過已刪的
   (data.tasks||[]).forEach(rt=>{
+    if(isTombed("task", rt.id, rt.createdAt)) return;
     const local=tasks.find(t=>t.id===rt.id);
     if(!local) tasks.push(rt);
     else{
@@ -2648,8 +2698,13 @@ function mergeBackup(data){
       if(!local.est && rt.est) local.est=rt.est;
     }
   });
-  (data.favMixes||[]).forEach(f=>{ if(!favMixes.some(x=>x.name===f.name)) favMixes.push(f); });
-  (data.presets||[]).forEach(p=>{ if(!presets.some(x=>x.id===p.id)) presets.push(p); });
+  (data.favMixes||[]).forEach(f=>{ if(isTombed("fav",f.name,f.createdAt)) return; if(!favMixes.some(x=>x.name===f.name)) favMixes.push(f); });
+  (data.presets||[]).forEach(p=>{ if(isTombed("preset",p.id,p.createdAt)) return; if(!presets.some(x=>x.id===p.id)) presets.push(p); });
+  // ④ 反過來:別台裝置刪掉的,這台也要跟著消失,否則這台一上傳又把它送回去,永遠刪不掉
+  tasks=tasks.filter(t=>!isTombed("task", t.id, t.createdAt));
+  favMixes=favMixes.filter(f=>!isTombed("fav", f.name, f.createdAt));
+  presets=presets.filter(p=>!isTombed("preset", p.id, p.createdAt));
+  if(activeTask && !tasks.some(t=>t.id===activeTask)) activeTask=null;
   if(data.waterLog) for(const d in data.waterLog) waterLog[d]=Math.max(waterLog[d]||0, data.waterLog[d]);
   localStorage.setItem("pomo_water",JSON.stringify(waterLog));
   roundCount=Math.max(roundCount, parseInt(data.roundCount,10)||0);
@@ -2790,6 +2845,7 @@ function ghRender(){
       +'<div style="font-size:12px;color:var(--dim);margin-top:10px;line-height:1.8">'
       +'☁️ <b style="color:var(--text)">上傳備份</b>:把這台裝置的紀錄存上雲端(取代雲端的舊備份)。<br>'
       +'⬇️ <b style="color:var(--text)">下載並合併</b>:把雲端和這台裝置的紀錄「加在一起」,兩邊都保留、不會弄丟——日常同步用這顆最安全。<br>'
+      +'<span style="color:var(--dim)">　（你在任何一台刪掉的任務／音效組合／情境,合併時不會再被另一台救回來。）</span><br>'
       +'⬇️ <b style="color:var(--text)">下載並覆蓋</b>:把這台裝置的紀錄<b>全部刪掉</b>,完全換成雲端備份——只建議換新手機/新電腦「第一次還原」時用,按下去會再跟你確認一次。'
       +'</div>'
       +'<div id="ghStatus" style="font-size:12px;color:var(--dim);margin-top:10px;line-height:1.6"></div>'

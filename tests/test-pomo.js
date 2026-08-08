@@ -349,6 +349,10 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'zaker353',repo:'my-backup',token:'SECRET_TOKEN_123'})); ghRender();");
   check("設定後顯示三顆按鈕", d.getElementById("ghCard").textContent.includes("上傳備份") && d.getElementById("ghCard").textContent.includes("下載並合併") && d.getElementById("ghCard").textContent.includes("下載並覆蓋"));
   check("按鈕下方有白話說明", d.getElementById("ghCard").textContent.includes("加在一起") && d.getElementById("ghCard").textContent.includes("全部刪掉"));
+  check("說明有講「刪除也會同步」", d.getElementById("ghCard").textContent.includes("不會再被另一台救回來"));
+  // 上面那段說明是用字串拼 HTML 塞進去的,拼壞了標籤會吃掉後面的東西 → 確認後面的元素都還在
+  check("塞說明沒有打破後面的畫面", !!d.getElementById("ghStatus") && !!d.getElementById("ghAutoCb"));
+  check("使用說明頁也有講刪除會同步", d.body.textContent.includes("你在手機刪掉的任務、音效組合、自訂情境"));
   check("金鑰絕不進備份檔", !JSON.stringify(w.eval("buildBackupData()")).includes("SECRET_TOKEN_123"));
   E("ghDoUpload()");
   await sleep(200);
@@ -412,9 +416,61 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   w.__v2=v2; E("applyImport(window.__v2)");
   check("匯入 v2 備份成功", E("tasks.length")===1 && E("favMixes.length")===1);
 
+  // 11.6 🪦 刪除墓碑:刪掉的東西不可以被舊備份合併回來復活
+  // (這一節每一項都刻意把墓碑機制拿掉驗證過會失敗,不是假防護)
+  E("tasks=[]; favMixes=[]; presets=[]; tombs=emptyTombs(); activeTask=null; saveData();");
+  E("tasks.push({id:'keep1',name:'要留著',done:false,pomos:0,est:0,createdAt:1000});");
+  E("tasks.push({id:'gone1',name:'要刪掉',done:false,pomos:0,est:0,createdAt:1000});");
+  E("favMixes.push({name:'雨夜',mix:{rain:60},createdAt:1000});");
+  E("presets.push({id:'ps1',icon:'🎓',name:'考前',work:45,short:8,rounds:0,mix:null,createdAt:1000});");
+  E("activeTask='gone1'; saveData();");
+  // 拍一份「刪除前」的備份,等一下拿它來模擬另一台裝置的舊備份
+  const oldBackup = JSON.parse(JSON.stringify(E("buildBackupData()")));
+  E("window.confirm=()=>true; deleteTask('gone1');");
+  E("markDeleted('fav','雨夜'); favMixes=favMixes.filter(f=>f.name!=='雨夜');");
+  E("markDeleted('preset','ps1'); presets=presets.filter(p=>p.id!=='ps1'); saveData();");
+  check("刪除任務會立墓碑", E("tombs.task['gone1']>0")===true);
+  check("刪除後 activeTask 清空", E("activeTask")===null);
+
+  w.__old = oldBackup;
+  E("mergeBackup(window.__old)");
+  check("🪦 舊備份合併:刪掉的任務不復活", E("tasks.some(t=>t.id==='gone1')")===false,
+    "tasks="+E("JSON.stringify(tasks.map(t=>t.id))"));
+  check("🪦 舊備份合併:沒刪的任務要留著", E("tasks.some(t=>t.id==='keep1')")===true);
+  check("🪦 舊備份合併:刪掉的音效組合不復活", E("favMixes.length")===0);
+  check("🪦 舊備份合併:刪掉的自訂情境不復活", E("presets.length")===0);
+  // 連續合併兩次也不能復活(墓碑要是持久的,不是一次性的)
+  E("mergeBackup(window.__old)");
+  check("🪦 重複合併還是不復活", E("tasks.some(t=>t.id==='gone1')")===false && E("favMixes.length")===0);
+
+  // 刪掉之後「重新建立同名的」要放行——這就是墓碑必須帶時間戳的原因
+  E("favMixes.push({name:'雨夜',mix:{rain:80},createdAt:Date.now()+5000}); saveData();");
+  E("mergeBackup(window.__old)");
+  check("🪦 刪掉後重建同名組合:不會被自己的墓碑擋掉", E("favMixes.length")===1 && E("favMixes[0].mix.rain")===80);
+
+  // 反過來:別台裝置刪掉的,這台也要跟著消失(否則這台一上傳又把它送回去)
+  E("tasks=[]; favMixes=[]; presets=[]; tombs=emptyTombs(); saveData();");
+  E("tasks.push({id:'mine1',name:'這台有的',done:false,pomos:0,est:0,createdAt:1000}); saveData();");
+  w.__remote = {app:"pomodoro-whitenoise", version:4, sessions:[], tasks:[], favMixes:[], presets:[],
+    tombs:{task:{mine1: 9999999999999}, fav:{}, preset:{}}};
+  E("mergeBackup(window.__remote)");
+  check("🪦 別台刪掉的,這台同步後也消失", E("tasks.length")===0, "tasks="+E("JSON.stringify(tasks)"));
+  check("🪦 收到別台的墓碑會存起來", E("tombs.task['mine1']")===9999999999999);
+
+  // 墓碑本身要進備份檔,否則另一台永遠收不到「這東西被刪了」
+  check("🪦 墓碑有進備份檔", JSON.stringify(E("buildBackupData()")).includes("mine1"));
+  check("備份格式版本已升到 4", E("buildBackupData().version")===4);
+  // 「下載並覆蓋」= 完全變成備份檔的樣子,墓碑也要一起換掉
+  w.__noTomb = {app:"pomodoro-whitenoise", version:3, sessions:[], settings:{}, tasks:[], favMixes:[], presets:[], waterLog:{}};
+  E("applyImport(window.__noTomb)");
+  check("🪦 匯入舊版備份(沒有墓碑)會清空墓碑", E("Object.keys(tombs.task).length")===0);
+
   // 12. 重新整理後資料保留 + 週報
+  E("tasks=[]; favMixes=[]; presets=[]; tombs=emptyTombs(); saveData();");
+  w.__v2b = {app:"pomodoro-whitenoise", version:2, sessions:[{d:LAST_WEEK_DAY,m:25},{d:LAST_WEEK_DAY,m:50}], settings:{work:25}, roundCount:2, tasks:[{id:"t1",name:"測試",done:false,pomos:2}], activeTask:"t1", favMixes:[{name:"雨夜",mix:{rain:60,thunder:40}}], mixVol:{rain:60}};
+  E("applyImport(window.__v2b)");
   const store = {};
-  ["pomo_settings","pomo_sessions","pomo_tasks","pomo_activeTask","pomo_favmixes","pomo_mixvol","pomo_rounds","pomo_timer","pomo_presets"].forEach(k=>{
+  ["pomo_settings","pomo_sessions","pomo_tasks","pomo_activeTask","pomo_favmixes","pomo_mixvol","pomo_rounds","pomo_timer","pomo_presets","pomo_tombs"].forEach(k=>{
     const v=w.localStorage.getItem(k); if(v!==null) store[k]=v;
   });
   const dom2 = makeDom(store);

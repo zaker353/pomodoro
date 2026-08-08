@@ -1,6 +1,6 @@
 // 離線快取:第一次開啟後,之後沒網路也能用
 const CACHE_PREFIX = "pomo-";
-const CACHE = CACHE_PREFIX + "v12";
+const CACHE = CACHE_PREFIX + "v13";
 const FILES = [
   "./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png",
   "./sounds/rain.mp3", "./sounds/ocean.mp3", "./sounds/cafe.mp3",
