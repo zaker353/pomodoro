@@ -608,7 +608,7 @@
         <div class="set-row"><label>每幾輪進入長休息</label><input type="number" id="setEvery" min="2" max="10" onchange="saveSettings()"></div>
         <div class="set-row"><label>每日目標(顆)<span class="hint">計時頁會顯示進度環,設 0 隱藏</span></label><input type="number" id="setGoal" min="0" max="30" onchange="saveSettings()"></div>
         <div class="set-row"><label>結束鈴聲重複次數<span class="hint">怕沒聽到可以調多次(1~5)</span></label><input type="number" id="setChime" min="1" max="5" onchange="saveSettings()"></div>
-        <div class="set-row"><label>嚴格模式<span class="hint">計時中隱藏「跳過」「重設」,防止自己偷懶</span></label>
+        <div class="set-row"><label>嚴格模式<span class="hint">這一輪結束前藏起「跳過」「重設」。可以暫停(有急事要能停),但不能靠「暫停→跳過」偷懶</span></label>
           <div class="switch"><input type="checkbox" id="setStrict" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setStrict').click()"></div></div></div>
         <div class="set-row"><label>休息結束自動開始專注</label>
           <div class="switch"><input type="checkbox" id="setAutoWork" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoWork').click()"></div></div></div>
@@ -690,7 +690,7 @@
           2. 按「開始」專心做事,時間到會響鈴自動進入休息。<br>
           3. 休息完再按開始,進入下一輪。<br><br>
           <b>按鈕說明:</b>「跳過」= 放棄這一輪不計入統計;「重設」= 這一輪重新來過;<b>「正計時模式」</b>= 不想被倒數壓迫時打開,改成做多久記多久,結束時按「完成」記錄。<br><br>
-          上方的<b>情境按鈕</b>(預設有工作/讀書/放鬆,可以自己增刪修改)會一鍵幫你調好時長和背景音,不用每次設定。
+          上方的<b>情境按鈕</b>(預設有工作/讀書/放鬆,可以自己增刪修改)會一鍵幫你調好時長和背景音,不用每次設定。情境如果設了「自動連跑 N 輪」,按下去會用該情境的時長倒數(連跑需要固定的結束點才接得下去);若你原本開著正計時,跑完會自動恢復。
         </div>
       </details>
       <details class="help">
@@ -808,7 +808,8 @@
           4. 按 Generate 後<b>馬上複製</b>那串金鑰(離開頁面就看不到了),回來貼到上面的欄位。<br><br>
           <b>安全性:</b>金鑰只存在這台裝置,不會跟著「匯出備份」流出;它只能動那個備份倉庫,動不了你 GitHub 的其他東西。每台裝置都要各貼一次。<br><br>
           <b>日常用法:</b>設定完成後<b>什麼都不用做</b>——「⚡ 全自動同步」預設開啟:每次打開 App 自動從雲端下載合併,紀錄有變動後約 90 秒自動上傳,切到別的 App 時也會盡力上傳一次。手動三顆按鈕隨時可用;「下載並覆蓋」只有新裝置第一次還原時才用。<br><br>
-          <b>刪除也會同步:</b>你在手機刪掉的任務、音效組合、自訂情境,電腦同步後也會跟著消失,不會被另一台的舊備份救回來。
+          <b>刪除也會同步:</b>你在手機刪掉的任務、音效組合、自訂情境,電腦同步後也會跟著消失,不會被另一台的舊備份救回來。<br><br>
+          <b>設定也會同步:</b>專注時長、每日目標、健康提醒、音量、專注音效組合這些,以「最後修改的那台」為準。專注紀錄和任務則是兩邊相加,不會互相蓋掉。
         </div>
       </details>
     </section>
@@ -973,6 +974,21 @@ function todayStr(offset=0){
 const MAX_SESSION_MIN = 240;
 // 「這一輪專注度如何?」要打分在哪一筆紀錄上(用 id 記,不能靠陣列位置)
 let moodTargetId=null;
+// 這一輪「已經開始、還沒結束」。嚴格模式靠它判斷要不要藏偷懶按鈕——
+// 不能只看 running,否則按一下暫停按鈕就冒出來,「暫停→跳過」兩下就繞過防呆。
+let phaseStarted=false;
+// 慣例連跑需要固定時長才能自動接續,套用有連跑的情境時暫時停用正計時。
+// 用 override 而不是直接改 settings.countUp,才不會把他的設定改掉。
+let countUpOverride=false;
+// 目前播的是不是「App 自己開的休息音效」。是的話回到專注時不可以把它
+// 當成使用者的專注組合記起來(否則專注組合會被偷偷換成海浪)。
+let autoBreakMix=false;
+/* 設定類資料(設定、音量、專注音效組合)最後一次改動的時間。
+   合併時「取較新的那邊」,這樣手機改了時長,電腦同步後也會跟著變。
+   時間戳是自動維護的:saveData() 每次比對快照,真的變了才更新——
+   靠人記得呼叫遲早會漏(CLAUDE.md 第 22 條的閘門)。 */
+let settingsAt=0, settingsSnap="";
+function settingsSnapshot(){ return JSON.stringify([settings, mixVol, focusMix]); }
 let toastTimer=null;
 function toast(msg){
   const t=$("toast"); t.textContent=msg; t.classList.add("show");
@@ -1058,6 +1074,8 @@ function load(){
   presets = Array.isArray(pp) ? pp : JSON.parse(JSON.stringify(DEFAULT_PRESETS));
   try{ focusMix=JSON.parse(localStorage.getItem("pomo_focusmix")||"null"); }catch(e){ focusMix=null; }
   try{ tombs=sanitizeTombs(JSON.parse(localStorage.getItem("pomo_tombs")||"null")); }catch(e){ tombs=emptyTombs(); }
+  settingsAt=parseInt(localStorage.getItem("pomo_settingsat")||"0",10)||0;
+  settingsSnap=settingsSnapshot();
 }
 function saveData(){
   localStorage.setItem("pomo_settings", JSON.stringify(settings));
@@ -1069,6 +1087,14 @@ function saveData(){
   localStorage.setItem("pomo_mixvol", JSON.stringify(mixVol));
   localStorage.setItem("pomo_presets", JSON.stringify(presets));
   localStorage.setItem("pomo_tombs", JSON.stringify(tombs));
+  const snapNow=settingsSnapshot();
+  if(snapNow!==settingsSnap){       // 設定類真的改了才動時間戳
+    settingsSnap=snapNow;
+    // 用 max(現在, 已知最新+1):萬一另一台的時鐘比較快,收到未來的時間戳之後
+    // 這台再怎麼改都贏不了,設定就永遠同步不出去(測試抓到的)。
+    settingsAt=Math.max(Date.now(), settingsAt+1);
+    localStorage.setItem("pomo_settingsat", String(settingsAt));
+  }
   // 要跟 activeTask 一樣寫 else removeItem——否則清成 null 之後舊值還留在 localStorage,
   // 下次 load() 又把它讀回來,「覆蓋」等於沒覆蓋乾淨(2026-08-09 全面稽核找到)
   if(focusMix) localStorage.setItem("pomo_focusmix", JSON.stringify(focusMix));
@@ -1116,7 +1142,7 @@ let routine=null;  // 一鍵慣例:{name, target, done}
 function modeMinutes(m){ return m==="focus"?settings.work : m==="short"?settings.short : settings.long; }
 function modeName(m){ return m==="focus"?"專注" : m==="short"?"短休息" : "長休息"; }
 function modeColor(m){ return m==="focus"?"var(--focus)" : m==="short"?"var(--short)" : "var(--long)"; }
-function isCountUpFocus(){ return mode==="focus" && settings.countUp; }
+function isCountUpFocus(){ return mode==="focus" && settings.countUp && !countUpOverride; }
 
 function switchMode(m, manual){
   // 按到「本來就在的那個模式」不該把進行中的計時歸零。原本沒擋,
@@ -1128,8 +1154,8 @@ function switchMode(m, manual){
   if(manual && running){
     if(!confirm("計時進行中,確定要切換到「"+modeName(m)+"」嗎?目前這一輪會取消不計入。")) return;
   }
-  if(manual) routine=null; // 手動切換=中止慣例流程
-  stopTick(); running=false; mode=m;
+  if(manual){ routine=null; countUpOverride=false; } // 手動切換=中止慣例流程
+  stopTick(); running=false; phaseStarted=false; mode=m;
   cuActive=false; cuAccum=0;
   remainMs=modeMinutes(m)*60000;
   document.documentElement.style.setProperty("--accent", modeColor(m));
@@ -1146,7 +1172,7 @@ function toggleTimer(){
     if(running){ cuAccum+=Date.now()-cuStart; running=false; stopTick(); releaseWake(); }
     else{
       if(!cuActive){ cuActive=true; cuAccum=0; }
-      cuStart=Date.now(); running=true; startTick(); requestWake();
+      cuStart=Date.now(); running=true; phaseStarted=true; startTick(); requestWake();
       $("phaseLabel").textContent="專注中(正計時)…加油!";
       followOnFocusStart();
     }
@@ -1157,7 +1183,7 @@ function toggleTimer(){
     }else{
       if(remainMs<=0) remainMs=modeMinutes(mode)*60000;
       endAt=Date.now()+remainMs;
-      running=true; startTick(); requestWake();
+      running=true; phaseStarted=true; startTick(); requestWake();
       $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
       if(mode==="focus") followOnFocusStart();
     }
@@ -1178,18 +1204,30 @@ function rememberFocusMix(){
 }
 function followOnFocusStart(){
   if(!settings.followTimer) return;
+  // 現在響的是 App 自己開的休息音效,不是他挑的 → 千萬不可以記成專注組合,
+  // 否則專注組合會被一路偷換成海浪(2026-08-09 稽核實測連手調的音量都被改掉)
+  if(autoBreakMix){
+    autoBreakMix=false;
+    if(focusMix) applyMix(focusMix); else stopAllSounds();
+    return;
+  }
   if(anySoundOn()) rememberFocusMix();
   else if(focusMix) applyMix(focusMix);
 }
 function followOnBreakStart(){
   if(!settings.followTimer) return;
   rememberFocusMix();
-  if(settings.breakSound==="stop") stopAllSounds();
-  else if(settings.breakSound==="ocean") applyMix({ocean:55});
+  if(settings.breakSound==="stop"){ stopAllSounds(); autoBreakMix=false; }
+  else if(settings.breakSound==="ocean"){
+    // 用他自己設定的海浪音量,不要硬塞 55 —— applyMix 會把音量寫進 mixVol 存檔,
+    // 等於每次休息都把他手調的音量改掉(2026-08-09 稽核找到)
+    applyMix({ocean: (mixVol.ocean!==undefined ? mixVol.ocean : 55)});
+    autoBreakMix=true;
+  }
 }
 
 function resetTimer(){
-  stopTick(); running=false;
+  stopTick(); running=false; phaseStarted=false;
   cuActive=false; cuAccum=0;
   remainMs=modeMinutes(mode)*60000;
   $("phaseLabel").textContent = mode==="focus" ? "準備開始專注" : "休息一下吧";
@@ -1285,8 +1323,9 @@ function advance(completed, minutes){
       if(routine){
         routine.done++;
         if(routine.done>=routine.target){
-          toast("🎉 慣例「"+routine.name+"」全部完成,共 "+routine.target+" 輪,太厲害了!");
-          routine=null;
+          toast("🎉 慣例「"+routine.name+"」全部完成,共 "+routine.target+" 輪,太厲害了!"
+            + (countUpOverride ? "已恢復正計時模式。" : ""));
+          routine=null; countUpOverride=false;   // 慣例結束 → 還原正計時
         }
       }
       if(!routine) toast("🍅 完成一輪專注("+minutes+" 分鐘)!休息一下吧");
@@ -1330,7 +1369,9 @@ function updateDisplay(){
 function updateButtons(){
   $("startBtn").textContent = running ? "暫停" : (cuActive&&cuAccum>0 ? "繼續" : "開始");
   const cu=isCountUpFocus();
-  const hide=running && settings.strict; // 嚴格模式:計時中藏起偷懶按鈕
+  // 嚴格模式:只要這一輪開始了就藏起偷懶按鈕,暫停也一樣。
+  // 暫停本身不擋(真的有急事要能停),但不准用「暫停→跳過」偷懶。
+  const hide=phaseStarted && settings.strict;
   $("doneBtn").style.display = cu ? "" : "none";
   $("skipBtn").style.display = (cu||hide) ? "none" : "";
   $("resetBtn").style.display = hide ? "none" : "";
@@ -1343,7 +1384,7 @@ function toggleCountUpSetting(cb){
 }
 
 function saveTimerState(){
-  localStorage.setItem("pomo_timer", JSON.stringify({mode,running,endAt,remainMs,cuActive,cuStart,cuAccum,routine}));
+  localStorage.setItem("pomo_timer", JSON.stringify({mode,running,endAt,remainMs,cuActive,cuStart,cuAccum,routine,phaseStarted,countUpOverride}));
 }
 function restoreTimerState(){
   let s=null;
@@ -1352,6 +1393,8 @@ function restoreTimerState(){
   mode=["focus","short","long"].includes(s.mode)?s.mode:"focus";
   switchMode(mode,false);
   routine=(s.routine && s.routine.target)?s.routine:null;
+  countUpOverride=!!s.countUpOverride;
+  phaseStarted=!!s.phaseStarted;   // 重新整理不可以變成繞過嚴格模式的後門
   if(s.cuActive && mode==="focus" && settings.countUp){
     cuActive=true; cuAccum=s.cuAccum||0;
     // 離開太久(關掉分頁/關機)就不把這段算進去,否則會記出假紀錄
@@ -1705,7 +1748,8 @@ function stopSoundOne(name){
   updateSoundCard(name);
 }
 function stopAllSounds(){ Object.keys(SOUND_DEFS).forEach(stopSoundOne); }
-function toggleSound(name){ mixOn[name] ? stopSoundOne(name) : startSound(name); }
+// 使用者一動聲音,就不再算是「App 自己開的休息音效」
+function toggleSound(name){ autoBreakMix=false; mixOn[name] ? stopSoundOne(name) : startSound(name); }
 function setSndVol(name,v){
   mixVol[name]=parseInt(v,10);
   if(sndGain[name]) sndGain[name].gain.value=volCurve(mixVol[name]);
@@ -1839,16 +1883,22 @@ function applyPreset(i){
     if(settings.strict){ toast("🔒 嚴格模式:先完成這一輪再切換情境"); return; }
     if(!confirm("計時進行中,套用情境會取消目前這一輪,確定嗎?")) return;
   }
-  routine=null;
+  routine=null; countUpOverride=false;
   settings.work=p.work;
   if(p.short) settings.short=p.short;
   saveData(); applySettingsToUI();
   if(p.mix && Object.keys(p.mix).length) applyMix(p.mix);
   switchMode("focus",false);
   if(p.rounds>0){
+    // 慣例連跑要能「自動接續」,就得有固定的結束時間點。正計時沒有自然結束點
+    // (要人按「完成」),所以這一輪改用倒數,結束後自動還原。
+    const wasCountUp = settings.countUp;
+    countUpOverride = wasCountUp;
     routine={name:p.name, target:p.rounds, done:0};
+    switchMode("focus",false);   // 讓畫面切回倒數的顯示
     toggleTimer(); // 一鍵慣例:直接開跑,輪與輪之間自動接續
-    toast("▶️ 慣例「"+p.name+"」開始:共 "+p.rounds+" 輪,全程自動接續");
+    toast("▶️ 慣例「"+p.name+"」開始:共 "+p.rounds+" 輪,全程自動接續"
+      + (wasCountUp ? "(這段期間先用倒數 "+p.work+" 分鐘,結束後自動恢復正計時)" : ""));
   }else{
     toast("已套用「"+p.name+"」:專注 "+p.work+" 分鐘,按開始就緒");
   }
@@ -2602,7 +2652,8 @@ function buildBackupData(){
   // ⚠️ 新增欄位時,一定要同時決定它在 mergeBackup() 的合併政策(取聯集?取較新?取較大值?),
   //    只加在這裡而忘了那裡 = 這個欄位永遠不會跨裝置同步。
   return {app:"pomodoro-whitenoise", version:4, exportedAt:new Date().toISOString(),
-    settings, sessions, roundCount, tasks, activeTask, favMixes, mixVol, presets, focusMix, waterLog, tombs};
+    settings, sessions, roundCount, tasks, activeTask, favMixes, mixVol, presets, focusMix, waterLog, tombs,
+    settingsAt};
 }
 function exportBackup(){
   localStorage.setItem("pomo_lastexport", todayStr());
@@ -2657,6 +2708,9 @@ function applyImport(data){
   focusMix=data.focusMix||null;
   // 「覆蓋」= 完全變成備份檔的樣子,墓碑也一起換掉(舊備份沒有 tombs 就清空)
   tombs=sanitizeTombs(data.tombs);
+  settingsAt=parseInt(data.settingsAt,10)||Date.now();   // 覆蓋 = 完全變成備份檔的樣子
+  localStorage.setItem("pomo_settingsat", String(settingsAt));
+  settingsSnap=settingsSnapshot();
   waterLog=(data.waterLog&&typeof data.waterLog==="object")?data.waterLog:{};
   localStorage.setItem("pomo_water",JSON.stringify(waterLog));
   saveData();
@@ -2738,6 +2792,23 @@ function mergeBackup(data){
     for(const id in incoming[k])
       if(incoming[k][id] > (tombs[k][id]||0)) tombs[k][id]=incoming[k][id];
   });
+  /* ①b 設定類(設定、音量、專注音效組合):取「比較新」的那一邊。
+     這三個原本完全不合併,結果手機把專注時長改成 50 分,電腦永遠收不到
+     (2026-08-09 稽核找到,兩位稽核都指出這是規格有洞)。 */
+  const theirAt=parseInt(data.settingsAt,10)||0;
+  if(theirAt>settingsAt && data.settings && typeof data.settings==="object"){
+    const ds=data.settings;
+    settings={...DEFAULT_SETTINGS, ...ds, health:{}};
+    for(const k in DEFAULT_SETTINGS.health)
+      settings.health[k]={...DEFAULT_SETTINGS.health[k], ...((ds.health&&ds.health[k])||{})};
+    if(data.mixVol) for(const k in data.mixVol) if(SOUND_DEFS[k]) mixVol[k]=data.mixVol[k];
+    focusMix=data.focusMix||null;
+    settingsAt=theirAt;
+    localStorage.setItem("pomo_settingsat", String(settingsAt));
+    settingsSnap=settingsSnapshot();   // 別讓下面的 saveData() 又把時間戳蓋成現在
+    applySettingsToUI(); applyHealthToUI(); applyTheme(); renderSoundGrid(); scheduleAllRems();
+    if(!running){ remainMs=modeMinutes(mode)*60000; updateDisplay(); }
+  }
   /* ② 專注紀錄:取聯集(沒有刪除功能,所以不需要墓碑)。
      ⚠️ 這裡不能用「字串一樣就當成重複」。紀錄長這樣 {d:日期, m:分鐘, t:小時},
      同一小時內做兩輪 25 分鐘 → 兩筆字串完全相同,那是兩筆真的紀錄不是重複。
@@ -2946,7 +3017,7 @@ function ghRender(){
       +'<div style="font-size:12px;color:var(--dim);margin-top:10px;line-height:1.8">'
       +'☁️ <b style="color:var(--text)">上傳備份</b>:把這台裝置的紀錄存上雲端(取代雲端的舊備份)。<br>'
       +'⬇️ <b style="color:var(--text)">下載並合併</b>:把雲端和這台裝置的紀錄「加在一起」,兩邊都保留、不會弄丟——日常同步用這顆最安全。<br>'
-      +'<span style="color:var(--dim)">　（你在任何一台刪掉的任務／音效組合／情境,合併時不會再被另一台救回來。）</span><br>'
+      +'<span style="color:var(--dim)">　（你在任何一台刪掉的任務／音效組合／情境,合併時不會再被另一台救回來。<br>　　設定、音量、專注音效組合則是「最後改的那台說了算」。）</span><br>'
       +'⬇️ <b style="color:var(--text)">下載並覆蓋</b>:把這台裝置的紀錄<b>全部刪掉</b>,完全換成雲端備份——只建議換新手機/新電腦「第一次還原」時用,按下去會再跟你確認一次。'
       +'</div>'
       +'<div id="ghStatus" style="font-size:12px;color:var(--dim);margin-top:10px;line-height:1.6"></div>'

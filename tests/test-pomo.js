@@ -529,6 +529,93 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("🩺 存雲端設定時會先下載對帳",
     E("(function(){ return String(ghSaveConfig).includes('ghAutoDownload'); })()")===true);
 
+  // 11.545 🛠 2026-08-09 使用者決定要修的四件事
+  // ① 嚴格模式:暫停不擋,但「跳過/重設」在這一輪結束前都要藏著
+  E("sessions=[]; tasks=[]; settings.strict=true; settings.countUp=false; switchMode('focus',false);");
+  E("toggleTimer()");
+  check("🛠 嚴格模式計時中藏起跳過/重設",
+    d.getElementById("skipBtn").style.display==="none" && d.getElementById("resetBtn").style.display==="none");
+  E("toggleTimer()");   // 暫停
+  check("🛠 嚴格模式仍可以暫停(有急事要能停)", E("running")===false);
+  check("🛠 暫停後跳過/重設還是藏著(堵死「暫停→跳過」)",
+    d.getElementById("skipBtn").style.display==="none" && d.getElementById("resetBtn").style.display==="none",
+    "skip="+d.getElementById("skipBtn").style.display+" reset="+d.getElementById("resetBtn").style.display);
+  // 重新整理也不可以變成後門
+  E("saveData(); saveTimerState();");   // ⚠️ 一定要 saveData(),否則新分頁讀不到 strict=true,
+                                        //    這條測試就會因為「根本沒開嚴格模式」而假通過
+  const strictStore={};
+  ["pomo_settings","pomo_timer"].forEach(k=>{ const v=w.localStorage.getItem(k); if(v!==null) strictStore[k]=v; });
+  const domStrict=makeDom(strictStore); await sleep(300);
+  const wS=domStrict.window;
+  check("🛠 重新整理後嚴格模式設定還在(前提檢查)", wS.eval("settings.strict")===true && wS.eval("phaseStarted")===true,
+    "strict="+wS.eval("settings.strict")+" phaseStarted="+wS.eval("phaseStarted"));
+  check("🛠 重新整理也繞不過嚴格模式",
+    wS.document.getElementById("skipBtn").style.display==="none" &&
+    wS.document.getElementById("resetBtn").style.display==="none",
+    "skip="+wS.document.getElementById("skipBtn").style.display+" reset="+wS.document.getElementById("resetBtn").style.display);
+  domStrict.window.close();
+  E("switchMode('focus',false); settings.strict=false;");
+  check("🛠 這一輪結束後按鈕會回來", d.getElementById("resetBtn").style.display!=="none");
+
+  // ② 正計時 + 情境連跑:改用倒數才跑得動,結束後自動還原
+  E("settings.countUp=true; presets=[{id:'pR',icon:'🎓',name:'連跑測試',work:25,short:5,rounds:2,mix:null,createdAt:1}];");
+  E("applyPreset(0)");
+  check("🛠 正計時下套用連跑情境會改用倒數", E("isCountUpFocus()")===false && E("countUpOverride")===true);
+  check("🛠 慣例進度看得到(不會被正計時字樣蓋掉)",
+    d.getElementById("roundLabel").textContent.includes("慣例"), d.getElementById("roundLabel").textContent.slice(0,30));
+  E("endAt=Date.now()-100"); await sleep(400); E("closeMood()");
+  check("🛠 慣例第 1 輪真的有算到", E("routine && routine.done")===1, "done="+E("routine&&routine.done"));
+  E("switchMode('focus',false); endAt=Date.now()-100; toggleTimer(); endAt=Date.now()-100;");
+  await sleep(400); E("closeMood()");
+  check("🛠 慣例跑完會還原正計時", E("routine")===null && E("countUpOverride")===false);
+  check("🛠 使用者的正計時設定沒有被改掉", E("settings.countUp")===true);
+  E("settings.countUp=false; switchMode('focus',false); sessions=[]; presets=[];");
+
+  // ③ 設定/音量/專注音效組合要跨裝置同步(取較新)
+  E("settings.work=25; mixVol.rain=60; focusMix=null; saveData();");
+  const oldAt=E("settingsAt");
+  w.__newer={app:"pomodoro-whitenoise",version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},
+    settingsAt: Date.now()+60000, settings:{work:50, dailyGoal:12}, mixVol:{rain:33}, focusMix:{cafe:70}};
+  E("mergeBackup(window.__newer)");
+  check("🛠 另一台較新的設定會同步過來",
+    E("settings.work")===50 && E("settings.dailyGoal")===12, "work="+E("settings.work"));
+  check("🛠 音量也會同步", E("mixVol.rain")===33, "rain="+E("mixVol.rain"));
+  check("🛠 專注音效組合也會同步", E("focusMix && focusMix.cafe")===70, E("JSON.stringify(focusMix)"));
+  check("🛠 畫面跟著更新(不是只有記憶體變)", d.getElementById("setWork").value==="50", d.getElementById("setWork").value);
+  // 較舊的一邊不可以蓋掉較新的
+  w.__older={app:"pomodoro-whitenoise",version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},
+    settingsAt: 1000, settings:{work:5}, mixVol:{rain:99}};
+  E("mergeBackup(window.__older)");
+  check("🛠 比較舊的設定不會蓋掉新的", E("settings.work")===50 && E("mixVol.rain")===33, "work="+E("settings.work"));
+  // 舊版備份(沒有 settingsAt)也不可以蓋掉
+  w.__nots={app:"pomodoro-whitenoise",version:3,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},settings:{work:7}};
+  E("mergeBackup(window.__nots)");
+  check("🛠 舊版備份(沒時間戳)不會蓋掉設定", E("settings.work")===50);
+  check("🛠 設定時間戳有進備份檔", E("buildBackupData().settingsAt")>0);
+  // 改了設定才會動時間戳,只改紀錄不會
+  E("sessions.push({id:'z1',d:'2026-06-01',m:25,t:9}); saveData();");
+  check("🛠 只改紀錄不會動到設定時間戳", E("settingsAt")===E("buildBackupData().settingsAt"));
+  const atBefore=E("settingsAt");
+  E("settings.work=41; saveData();");
+  check("🛠 改了設定,時間戳會更新", E("settingsAt")>atBefore, atBefore+" → "+E("settingsAt"));
+  E("settings.work=25; sessions=[]; saveData();");
+
+  // ④ 休息音效不可以偷換掉他的專注音效組合、也不可以改掉他調的音量
+  E("settings.followTimer=true; settings.breakSound='ocean'; mixVol.ocean=88; stopAllSounds();");
+  E("mixVol.rain=90; mixVol.cafe=80; startSound('rain'); startSound('cafe'); switchMode('focus',false);");
+  E("toggleTimer(); followOnFocusStart();");
+  const focusBefore=E("JSON.stringify(focusMix)");
+  E("followOnBreakStart()");
+  check("🛠 休息時用他自己設定的海浪音量(不是硬塞 55)", E("mixVol.ocean")===88, "ocean="+E("mixVol.ocean"));
+  E("followOnFocusStart()");
+  check("🛠 回到專注,音效組合換回他原本挑的",
+    E("mixOn.rain")===true && E("mixOn.cafe")===true && E("mixOn.ocean")!==true,
+    "on="+E("JSON.stringify(Object.keys(mixOn).filter(k=>mixOn[k]))"));
+  check("🛠 專注組合沒有被偷偷換成海浪",
+    E("JSON.stringify(focusMix)")===focusBefore && !E("JSON.stringify(focusMix)").includes("ocean"),
+    E("JSON.stringify(focusMix)"));
+  E("stopAllSounds(); settings.followTimer=false; resetTimer();");
+
   // 11.55 🔍 全面體檢計數與指令
   const auditFile = path.join(__dirname, "..", "audit-info.js");
   check("體檢計數檔存在", fs.existsSync(auditFile));
