@@ -519,6 +519,23 @@
         <div class="hour-note" id="hourNote"></div>
       </div>
       <div class="chart-card">
+        <div class="chart-title">⏱ 時間都花在哪?(依任務統計)</div>
+        <div class="backup-btns" style="margin-bottom:10px">
+          <button class="btn" id="taRange30" onclick="setTaskStatRange(30)">最近 30 天</button>
+          <button class="btn" id="taRangeAll" onclick="setTaskStatRange(0)">全部</button>
+        </div>
+        <div id="taskTimeList"></div>
+      </div>
+      <details class="help tool">
+        <summary>📋 最近的專注紀錄(記錯了可以刪)</summary>
+        <div class="help-body">
+          <div class="hour-note" style="margin-bottom:8px">
+            按 ✕ 可以刪掉記錯的那一筆(例如手滑按到「完成」)。刪掉後統計、熱力圖、連續天數都會跟著扣掉,<b>而且沒辦法復原</b>。
+          </div>
+          <div id="sessionList"></div>
+        </div>
+      </details>
+      <div class="chart-card">
         <div class="chart-title">🏅 成就徽章(<span id="badgeCount">0</span> 個已解鎖)</div>
         <div class="badge-grid" id="badgeGrid"></div>
       </div>
@@ -663,6 +680,8 @@
           ・完成/復原/刪除,每個任務顯示累積番茄數。<br><br>
           <b>📊 統計頁</b><br>
           ・今日/最近7天/累計/連續天數、20 週熱力圖、14 天長條圖。<br>
+          ・<b>⏱ 時間都花在哪</b>:依任務統計你的時間分配(要在計時頁選任務才記得到)。<br>
+          ・<b>📋 最近的專注紀錄</b>:記錯了(手滑按到完成)可以刪掉那一筆。<br>
           ・專注度統計(很專注/普通/分心)。<br>
           ・上週摘要:每週第一次打開 App 時自動跳出上週週報。<br>
           ・時段分析:累積資料後告訴你「幾點的你最強」。<br>
@@ -807,6 +826,7 @@
           ・效期(Expiration)建議選長一點,到期了再來換一次。<br>
           4. 按 Generate 後<b>馬上複製</b>那串金鑰(離開頁面就看不到了),回來貼到上面的欄位。<br><br>
           <b>安全性:</b>金鑰只存在這台裝置,不會跟著「匯出備份」流出;它只能動那個備份倉庫,動不了你 GitHub 的其他東西。每台裝置都要各貼一次。<br><br>
+          <b>救命功能:</b>萬一資料被誤刪或被別台蓋掉,按「🕘 看以前的備份」可以挑一個時間點還原——每次上傳都會在你的 GitHub 倉庫留一份歷史,不會只剩最新的那份。<br><br>
           <b>日常用法:</b>設定完成後<b>什麼都不用做</b>——「⚡ 全自動同步」預設開啟:每次打開 App 自動從雲端下載合併,紀錄有變動後約 90 秒自動上傳,切到別的 App 時也會盡力上傳一次。手動三顆按鈕隨時可用;「下載並覆蓋」只有新裝置第一次還原時才用。<br><br>
           <b>刪除也會同步:</b>你在手機刪掉的任務、音效組合、自訂情境,電腦同步後也會跟著消失,不會被另一台的舊備份救回來。<br><br>
           <b>設定也會同步:</b>專注時長、每日目標、健康提醒、音量、專注音效組合這些,以「最後修改的那台」為準。專注紀錄和任務則是兩邊相加,不會互相蓋掉。
@@ -1026,9 +1046,12 @@ let presets=[], focusMix=null;
    時間戳是關鍵:只記 id 分不出「舊備份送回來的(該擋)」與
    「我刪掉之後又重新建立同名的(該放行)」——後者的 createdAt 會比墓碑晚。
    舊資料沒有 createdAt → 視為比任何墓碑都早 → 墓碑擋得住,正是我們要的。 */
-const TOMB_KINDS=["task","fav","preset"];   // 任務 / 音效組合 / 自訂情境
-let tombs={task:{}, fav:{}, preset:{}};      // {種類:{ 識別碼: 刪除時間戳 }}
-function emptyTombs(){ return {task:{}, fav:{}, preset:{}}; }
+const TOMB_KINDS=["task","fav","preset","session"];   // 任務 / 音效組合 / 自訂情境 / 專注紀錄
+let tombs=null;                              // {種類:{ 識別碼: 刪除時間戳 }}
+// ⚠️ 一定要從 TOMB_KINDS 推導,不可以再寫死種類——寫死的話新增種類時會忘記同步,
+//    isTombed() 讀到 undefined 直接爆掉(2026-08-09 加「紀錄」這種時就踩到了)
+function emptyTombs(){ const o={}; TOMB_KINDS.forEach(k=>o[k]={}); return o; }
+tombs=emptyTombs();
 // 把外來的墓碑資料洗乾淨(只收正整數時間戳),避免壞掉的備份檔弄壞本機
 function sanitizeTombs(raw){
   const out=emptyTombs();
@@ -1074,8 +1097,25 @@ function load(){
   presets = Array.isArray(pp) ? pp : JSON.parse(JSON.stringify(DEFAULT_PRESETS));
   try{ focusMix=JSON.parse(localStorage.getItem("pomo_focusmix")||"null"); }catch(e){ focusMix=null; }
   try{ tombs=sanitizeTombs(JSON.parse(localStorage.getItem("pomo_tombs")||"null")); }catch(e){ tombs=emptyTombs(); }
+  migrateSessionIds();
   settingsAt=parseInt(localStorage.getItem("pomo_settingsat")||"0",10)||0;
   settingsSnap=settingsSnapshot();
+}
+/* 舊紀錄沒有 id(id 是 2026-08-09 才加的),但「刪除」需要一個穩定的身分才立得了墓碑。
+   關鍵:補出來的 id 必須是「同樣的內容在任何裝置都算出同一個值」,不能用亂數——
+   否則兩台各補各的,同一筆會被當成兩筆,合併後變成重複。
+   做法:用內容 + 「同內容的第幾筆」組出來,兩台算出來必定一致。 */
+function migrateSessionIds(){
+  const seen={};
+  let changed=false;
+  sessions.forEach(s=>{
+    if(!s || s.id) return;
+    const base=[s.d, s.m, s.t, s.task||""].join("|");
+    seen[base]=(seen[base]||0)+1;
+    s.id="L"+base+"#"+seen[base];
+    changed=true;
+  });
+  return changed;
 }
 function saveData(){
   localStorage.setItem("pomo_settings", JSON.stringify(settings));
@@ -2123,6 +2163,8 @@ function renderStats(){
   renderHourStats();
   renderBadges();
   renderWeekCard();
+  renderTaskTime();
+  renderSessionList();
 }
 
 /* 每日目標進度環 */
@@ -2278,6 +2320,77 @@ function checkWeekReport(){
 }
 
 /* ============ 心情記錄 ============ */
+/* 刪除單筆專注紀錄。記錯了(手滑按完成、或以前的 bug 記出假紀錄)必須刪得掉,
+   否則會永遠留在熱力圖、累計、連續天數、徽章裡。刪除要立墓碑,不然另一台
+   裝置的舊備份一合併就復活了。 */
+function deleteSession(id){
+  const i=sessions.findIndex(x=>x.id===id);
+  if(i<0) return;
+  const s=sessions[i];
+  if(!confirm("刪除這筆紀錄?\n"+s.d+" "+String(s.t).padStart(2,"0")+" 點 · "+s.m+" 分鐘"
+    +"\n\n刪掉後統計、熱力圖、連續天數都會跟著扣掉,這個動作沒辦法復原。")) return;
+  markDeleted("session", id);
+  sessions.splice(i,1);
+  saveData(); renderStats(); renderSessionList(); renderTasks();
+  toast("已刪除這筆紀錄");
+}
+/* ⏱ 時間都花在哪:純粹讀既有資料算出來的,沒有新增任何欄位。
+   每筆紀錄本來就記著是哪個任務(rec.task),只是以前沒人拿來用。 */
+let taskStatDays=30;
+function setTaskStatRange(days){ taskStatDays=days; renderTaskTime(); }
+function renderTaskTime(){
+  const box=$("taskTimeList"); if(!box) return;
+  $("taRange30").style.opacity = taskStatDays===30 ? "1" : "0.5";
+  $("taRangeAll").style.opacity = taskStatDays===0 ? "1" : "0.5";
+  const from = taskStatDays>0 ? todayStr(-(taskStatDays-1)) : "";
+  const sum={};
+  let grand=0;
+  sessions.forEach(s=>{
+    if(from && s.d<from) return;
+    const key=s.task||"__none__";
+    sum[key]=(sum[key]||0)+(s.m||0);
+    grand+=(s.m||0);
+  });
+  const rows=Object.keys(sum).map(k=>{
+    const t=tasks.find(x=>x.id===k);
+    return {name: k==="__none__" ? "（沒有指定任務）" : (t ? t.name : "（已刪除的任務）"),
+            min:sum[k], done: t ? t.done : false};
+  }).sort((a,b)=>b.min-a.min);
+  if(!rows.length){
+    box.innerHTML='<div class="hour-note">這段期間還沒有紀錄。開始計時時在計時頁選一個任務,之後就看得到時間花在哪。</div>';
+    return;
+  }
+  const hm = m => m>=60 ? (Math.floor(m/60)+" 小時 "+(m%60?m%60+" 分":"")) : (m+" 分鐘");
+  box.innerHTML = rows.slice(0,10).map(r=>{
+    const pct=grand? Math.round(r.min/grand*100) : 0;
+    return '<div style="margin-bottom:9px">'
+      + '<div style="display:flex;justify-content:space-between;font-size:13px;gap:8px">'
+      + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+      + (r.done?"✅ ":"")+escapeHtml(r.name)+'</span>'
+      + '<span style="color:var(--dim);white-space:nowrap">'+hm(r.min)+' · '+pct+'%</span></div>'
+      + '<div style="height:6px;background:var(--card2);border-radius:3px;margin-top:3px;overflow:hidden">'
+      + '<div style="height:100%;width:'+pct+'%;background:var(--accent)"></div></div></div>';
+  }).join("")
+  + '<div class="hour-note" style="margin-top:8px">這段期間共專注 '+hm(grand)+'。'
+  + (rows.length>10 ? '(只列前 10 名)' : '')+'</div>';
+}
+
+/* 📋 最近的專注紀錄:讓記錯的那一筆刪得掉 */
+function renderSessionList(){
+  const box=$("sessionList"); if(!box) return;
+  const recent=sessions.slice(-40).reverse();
+  if(!recent.length){ box.innerHTML='<div class="hour-note">還沒有任何紀錄。</div>'; return; }
+  box.innerHTML=recent.map(s=>{
+    const t=s.task ? tasks.find(x=>x.id===s.task) : null;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px">'
+      + '<span style="flex:1">'+s.d+' <span style="color:var(--dim)">'+String(s.t).padStart(2,"0")+':00</span> · <b>'+s.m+'</b> 分'
+      + (t ? ' <span style="color:var(--dim)">· '+escapeHtml(t.name)+'</span>' : '')
+      + (s.mood!==undefined ? ' '+["😵","🙂","😃"][s.mood] : '')
+      + '</span>'
+      + '<button class="btn" style="padding:2px 10px;background:var(--card2);color:var(--dim);font-size:13px" '
+      + 'onclick="deleteSession('+JSON.stringify(s.id)+')">✕</button></div>';
+  }).join("");
+}
 function recordMood(v){
   // 用 id 認人。不能用「陣列最後一筆」——跳出這個問句到你按下去之間,
   // 雲端自動合併可能把別台的紀錄接在後面,心情就會打到別人的紀錄上
@@ -2831,6 +2944,9 @@ function mergeBackup(data){
   const mine=tally(sessions), theirs=tally(data.sessions);
   (data.sessions||[]).forEach(s=>{
     if(!s || !s.id) return;                       // 舊紀錄交給下面數份數
+    // 已經被刪掉的別再撿回來。這道跟下面 ④ 的「掃掉本機已刪紀錄」是刻意重疊的雙保險,
+    // 任一道都擋得住,不要因為看起來多餘就拿掉其中一道(2026-08-09 突變測試確認過)。
+    if(isTombed("session", s.id, s.createdAt)) return;
     const local=withId.get(s.id);
     if(!local){ withId.set(s.id, s); sessions.push(s); }
     else{ for(const k in s) if(local[k]===undefined) local[k]=s[k]; }   // 欄位取聯集
@@ -2854,6 +2970,7 @@ function mergeBackup(data){
   (data.favMixes||[]).forEach(f=>{ if(isTombed("fav",favKey(f),f.createdAt)) return; if(!favMixes.some(x=>x.name===f.name)) favMixes.push(f); });
   (data.presets||[]).forEach(p=>{ if(isTombed("preset",p.id,p.createdAt)) return; if(!presets.some(x=>x.id===p.id)) presets.push(p); });
   // ④ 反過來:別台裝置刪掉的,這台也要跟著消失,否則這台一上傳又把它送回去,永遠刪不掉
+  sessions=sessions.filter(x=>!(x && x.id) || !isTombed("session", x.id, x.createdAt));
   tasks=tasks.filter(t=>!isTombed("task", t.id, t.createdAt));
   favMixes=favMixes.filter(f=>!isTombed("fav", favKey(f), f.createdAt));
   presets=presets.filter(p=>!isTombed("preset", p.id, p.createdAt));
@@ -2963,6 +3080,72 @@ async function ghDoMerge(){
   }catch(e){ ghStatus("❌ "+e.message); }
   ghBusy=false;
 }
+/* 🕘 以前的備份:每次上傳都會在你的 GitHub 倉庫留下一筆帶時間的紀錄(commit),
+   所以完整歷史其實一直都在雲端,只是以前沒有介面看得到。
+   有了這個,任何「不小心被覆蓋」的意外都救得回來。 */
+async function ghListHistory(){
+  const cfg=loadGh(); if(!cfg) return [];
+  const url="https://api.github.com/repos/"+cfg.owner+"/"+cfg.repo
+    +"/commits?path="+encodeURIComponent(GH_BACKUP_PATH)+"&per_page=15";
+  const res=await fetch(url,{headers:ghHeaders(cfg.token)});
+  if(res.status===404) throw new Error("雲端還沒有備份檔。");
+  if(!res.ok) throw new Error(ghFriendly(res.status));
+  const list=await res.json();
+  return (Array.isArray(list)?list:[]).map(c=>({
+    sha:c.sha,
+    when:(c.commit && c.commit.committer && c.commit.committer.date) || "",
+    msg:(c.commit && c.commit.message) || ""
+  }));
+}
+async function ghDownloadAt(sha){
+  const cfg=loadGh(); if(!cfg) return null;
+  const res=await fetch("https://api.github.com/repos/"+cfg.owner+"/"+cfg.repo
+      +"/contents/"+encodeURIComponent(GH_BACKUP_PATH)+"?ref="+encodeURIComponent(sha),
+    {headers:{...ghHeaders(cfg.token), Accept:"application/vnd.github.raw+json"}});
+  if(!res.ok) throw new Error(ghFriendly(res.status));
+  const data=await res.json();
+  if(!data || data.app!=="pomodoro-whitenoise" || !Array.isArray(data.sessions))
+    throw new Error("那個版本的檔案不是有效的番茄鐘備份。");
+  return data;
+}
+function ghHideHistory(){ const b=$("ghHistory"); if(b) b.style.display="none"; }
+async function ghShowHistory(){
+  if(ghBusy) return; ghBusy=true; ghStatus("⏳ 讀取以前的備份…");
+  try{
+    const list=await ghListHistory();
+    if(!list.length){ ghStatus("雲端還沒有任何備份紀錄。"); ghBusy=false; return; }
+    const box=$("ghHistory");
+    box.style.display="block";
+    box.innerHTML='<div class="hour-note" style="margin-bottom:8px">'
+      + '每一列都是一次上傳。選一個會<b>完全換成那個時間點的資料</b>,按下去之前會再確認一次。</div>'
+      + list.map(c=>{
+          const t=c.when ? new Date(c.when).toLocaleString("zh-TW") : "(時間不明)";
+          return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;'
+            + 'border-bottom:1px solid var(--line);font-size:13px">'
+            + '<span style="flex:1">'+t+'</span>'
+            + '<button class="btn" style="padding:2px 10px;background:var(--card2);color:var(--text);font-size:13px" '
+            + 'onclick="ghRestore('+JSON.stringify(c.sha)+','+JSON.stringify(t)+')">還原</button></div>';
+        }).join("")
+      + '<div style="margin-top:8px"><button class="btn" style="background:var(--card2);color:var(--dim)" '
+      + 'onclick="ghHideHistory()">關閉</button></div>';
+    ghStatus("找到 "+list.length+" 個以前的版本(最多列 15 個)");
+  }catch(e){ ghStatus("❌ "+e.message); }
+  ghBusy=false;
+}
+async function ghRestore(sha, whenText){
+  if(ghBusy) return; ghBusy=true; ghStatus("⏳ 下載那個版本…");
+  try{
+    const data=await ghDownloadAt(sha);
+    if(confirm("要還原成 "+whenText+" 那個版本嗎?\n\n"
+      + "那個版本有 "+data.sessions.length+" 筆專注紀錄、"+((data.tasks||[]).length)+" 個任務。\n"
+      + "這台裝置目前的資料("+sessions.length+" 筆)會被完全取代。")){
+      applyImport(data); ghSyncedOk=true;
+      $("ghHistory").style.display="none";
+      ghStatus("✅ 已還原成 "+whenText+" 的版本。要讓其他裝置也變成這樣,請按「上傳備份」。");
+    }else ghStatus("已取消");
+  }catch(e){ ghStatus("❌ "+e.message); }
+  ghBusy=false;
+}
 async function ghDoOverwrite(){
   if(ghBusy) return; ghBusy=true; ghStatus("⏳ 下載中…");
   try{
@@ -3018,8 +3201,12 @@ function ghRender(){
       +'☁️ <b style="color:var(--text)">上傳備份</b>:把這台裝置的紀錄存上雲端(取代雲端的舊備份)。<br>'
       +'⬇️ <b style="color:var(--text)">下載並合併</b>:把雲端和這台裝置的紀錄「加在一起」,兩邊都保留、不會弄丟——日常同步用這顆最安全。<br>'
       +'<span style="color:var(--dim)">　（你在任何一台刪掉的任務／音效組合／情境,合併時不會再被另一台救回來。<br>　　設定、音量、專注音效組合則是「最後改的那台說了算」。）</span><br>'
-      +'⬇️ <b style="color:var(--text)">下載並覆蓋</b>:把這台裝置的紀錄<b>全部刪掉</b>,完全換成雲端備份——只建議換新手機/新電腦「第一次還原」時用,按下去會再跟你確認一次。'
+      +'⬇️ <b style="color:var(--text)">下載並覆蓋</b>:把這台裝置的紀錄<b>全部刪掉</b>,完全換成雲端備份——只建議換新手機/新電腦「第一次還原」時用,按下去會再跟你確認一次。<br>🕘 <b style="color:var(--text)">看以前的備份</b>:每次上傳都會在你的倉庫留下一份歷史。萬一資料被誤刪或被蓋掉,從這裡挑一個時間點就能救回來。'
       +'</div>'
+      +'<div class="backup-btns" style="margin-top:10px">'
+      +'<button class="btn" style="background:var(--card2);color:var(--text)" onclick="ghShowHistory()">🕘 看以前的備份(救回被蓋掉的資料)</button>'
+      +'</div>'
+      +'<div id="ghHistory" style="display:none;margin-top:10px"></div>'
       +'<div id="ghStatus" style="font-size:12px;color:var(--dim);margin-top:10px;line-height:1.6"></div>'
       +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:13px">'
       +'<span>⚡ 全自動同步<span style="display:block;font-size:11px;color:var(--dim)">開App自動下載合併;紀錄變更後約90秒自動上傳</span></span>'
@@ -3121,6 +3308,13 @@ const AUDIT_PROMPT = [
   "",
   "【收尾】",
   "・統籌者要逐條親自查證再修,不可以照單全收——代理的回報是線索不是結論。",
+  "・⭐ 每一條新寫的測試,都要用『突變測試』驗過:把那個功能改壞、跑測試、確認真的變紅。",
+  "  全綠就代表那條測試是假防護,要重寫。(2026-08-09 那輪 10 條假防護全靠這招抓到,",
+  "  其中 3 條還是當下剛寫的新測試。不做這一步,等於白寫。)",
+  "・⭐ 修的人不可以自己驗收。修完一定要另外派一個獨立代理,",
+  "  用跟修的人『不同的方法』重驗(突變測試、端對端模擬),而且要特別查:",
+  "  『修的過程有沒有製造出新問題?』(2026-08-09 那輪就是這樣抓到修第一版時",
+  "  自己造成的回歸——原本要修「少算」,結果換成「多算」。)",
   "・不同代理對同一件事給出不一致的判斷 = 規格有洞,要回去把規格寫死再一致套用。",
   "・修完派獨立代理驗收,並把修掉的問題寫成自動測試(新測試要故意改壞一次,確認真的會紅燈)。",
   "・全部做完後,commit 訊息裡一定要有「全面稽核」四個字(體檢計數靠它歸零)。"

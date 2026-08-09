@@ -244,6 +244,58 @@ function startServer(){
     await js("localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); ghRender();");
     check("🦊 假設定已清乾淨", await val("loadGh()===null"));
 
+    /* ---------- ✨ 統計頁的兩個新區塊:真的畫得出來、真的點得到 ---------- */
+    await js(`
+      tasks=[{id:'tA',name:'讀多益',done:false,pomos:0,est:0,createdAt:1},
+             {id:'tB',name:'寫程式',done:false,pomos:0,est:0,createdAt:1}];
+      sessions=[{id:'q1',d:todayStr(),m:25,t:10,task:'tB'},
+                {id:'q2',d:todayStr(),m:50,t:9,task:'tA'}];
+      tombs=emptyTombs(); saveData(); renderStats();
+    `);
+    await driver.findElement(By.id("nav-stats")).click();
+    await driver.sleep(400);
+    const ttText = await driver.findElement(By.id("taskTimeList")).getText();
+    check("🦊 任務時間統計真的畫得出來", ttText.includes("讀多益") && ttText.includes("50 分"), ttText.slice(0,70));
+    check("🦊 時間長的排前面", ttText.indexOf("讀多益") < ttText.indexOf("寫程式"));
+    await clickSafely(By.id("taRangeAll"));
+    await driver.sleep(250);
+    check("🦊 切換「全部」範圍按得動", await val("taskStatDays")===0);
+    await clickSafely(By.id("taRange30"));
+    // 紀錄清單在摺疊區裡 —— 要真的點開才看得到(自動測試常漏掉摺疊內容)
+    await js("document.querySelectorAll('details.help.tool').forEach(e=>e.open=true);");
+    await driver.sleep(300);
+    const slText = await driver.findElement(By.id("sessionList")).getText();
+    check("🦊 最近紀錄清單真的畫得出來", slText.includes("50") && slText.includes("讀多益"), slText.slice(0,70));
+    await js("window.confirm=()=>true; deleteSession('q2');");
+    await driver.sleep(300);
+    check("🦊 按刪除後畫面真的少一筆",
+      !(await driver.findElement(By.id("sessionList")).getText()).includes("讀多益"),
+      (await driver.findElement(By.id("sessionList")).getText()).slice(0,60));
+    check("🦊 刪除後統計也跟著扣掉",
+      !(await driver.findElement(By.id("taskTimeList")).getText()).includes("讀多益"));
+    // 拍一張給人看:截圖要拍到改動處,否則等於沒有證據
+    await js(`
+      tasks=[{id:'tA',name:'讀多益單字',done:false,pomos:0,est:0,createdAt:1},
+             {id:'tB',name:'寫程式',done:false,pomos:0,est:0,createdAt:1},
+             {id:'tC',name:'看書',done:true,pomos:0,est:0,createdAt:1}];
+      sessions=[{id:'w1',d:todayStr(),m:50,t:9,task:'tA'},{id:'w2',d:todayStr(),m:25,t:10,task:'tB'},
+                {id:'w3',d:todayStr(-1),m:75,t:14,task:'tA'},{id:'w4',d:todayStr(-1),m:30,t:20,task:'tC'},
+                {id:'w5',d:todayStr(-2),m:25,t:11}];
+      saveData(); renderStats();
+      document.querySelectorAll('details.help.tool').forEach(e=>e.open=true);
+      document.getElementById('taskTimeList').scrollIntoView({block:'center'});
+    `);
+    await driver.sleep(500);
+    fs.writeFileSync(path.join(__dirname, "screenshots", "任務時間統計.png"),
+      Buffer.from(await driver.takeScreenshot(), "base64"));
+    await js("document.getElementById('sessionList').scrollIntoView({block:'center'});");
+    await driver.sleep(400);
+    fs.writeFileSync(path.join(__dirname, "screenshots", "紀錄可刪除.png"),
+      Buffer.from(await driver.takeScreenshot(), "base64"));
+    await js("tasks=[]; sessions=[]; tombs=emptyTombs(); saveData(); renderStats();");
+    await driver.findElement(By.id("nav-settings")).click();
+    await driver.sleep(300);
+
     /* ---------- 🔍 全面體檢:真實瀏覽器才驗得到「外部檔真的載進來了」 ---------- */
     // jsdom 不會載入 <script src="audit-info.js">(測試裡是手動注入的),
     // 所以「這個檔到底載不載得起來」只有真瀏覽器驗得到 —— 路徑寫錯就會在這裡爆。

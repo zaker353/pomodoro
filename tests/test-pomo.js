@@ -49,14 +49,31 @@ function makeDom(presetStore){
       window.__fetchFail = false;
       window.__ghFail = false;
       window.__ghFiles = {};  // 假的 GitHub 倉庫:path -> 檔案內容字串
+      window.__ghHistory = [];  // 假的上傳歷史(新的在前)
       window.fetch = (url, opts) => {
         url = String(url); opts = opts || {};
         if (url.includes("api.github.com")) {
           if (window.__ghFail) return Promise.resolve({ok:false, status:401, json:()=>Promise.resolve({})});
+          // 假的「以前的備份」歷史:每次 PUT 會存一個快照
+          if (url.includes("/commits?path=")) {
+            const h = window.__ghHistory || [];
+            if (!h.length) return Promise.resolve({ok:false, status:404, json:()=>Promise.resolve([])});
+            return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve(
+              h.map((x,i)=>({sha:"sha"+i, commit:{message:"番茄鐘備份", committer:{date:x.date}}})))});
+          }
+          if (url.includes("?ref=")) {
+            const sha = decodeURIComponent(url.split("?ref=")[1]);
+            const idx = parseInt(String(sha).replace("sha",""),10);
+            const snap = (window.__ghHistory||[])[idx];
+            if (!snap) return Promise.resolve({ok:false, status:404, json:()=>Promise.resolve({})});
+            return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve(JSON.parse(snap.body))});
+          }
           if ((opts.method||"GET") === "PUT") {
             const body = JSON.parse(opts.body);
             const path = decodeURIComponent(url.split("/contents/")[1]);
             window.__ghFiles[path] = Buffer.from(body.content, "base64").toString("utf8");
+            window.__ghHistory = window.__ghHistory || [];
+            window.__ghHistory.unshift({date:new Date().toISOString(), body:window.__ghFiles[path]});
             return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve({})});
           }
           const tail = url.split("/contents/")[1] || "";
@@ -331,7 +348,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("健康頁 4 張練習卡", d.querySelectorAll(".action-card").length===4);
 
   // 10.5 說明/通知/主題/快捷鍵
-  check("說明+實用建議共 9 篇(含雲端備份教學)", d.querySelectorAll("details.help").length===9, d.querySelectorAll("details.help").length);
+  check("說明+實用建議共 9 篇(含雲端備份教學)", d.querySelectorAll("details.help:not(.tool)").length===9, d.querySelectorAll("details.help:not(.tool)").length);
   check("有功能總覽說明", [...d.querySelectorAll("details.help summary")].some(s=>s.textContent.includes("功能總覽")));
   check("通知開關預設關閉", d.getElementById("setNotify").checked===false);
   d.getElementById("setTheme").checked=true;
@@ -616,6 +633,71 @@ const LAST_WEEK_DAY = daysAgoStr(7);
     E("JSON.stringify(focusMix)"));
   E("stopAllSounds(); settings.followTimer=false; resetTimer();");
 
+  // 11.548 ✨ 2026-08-09 新增的四項(體檢指令另外驗)
+  // ── 紀錄可刪除 ──
+  E("sessions=[{id:'k1',d:'2026-06-01',m:25,t:9},{id:'k2',d:'2026-06-02',m:50,t:10}]; tasks=[]; tombs=emptyTombs(); saveData(); renderStats();");
+  check("✨ 統計頁列得出最近的紀錄", d.getElementById("sessionList").textContent.includes("2026-06-01"),
+    d.getElementById("sessionList").textContent.slice(0,50));
+  check("✨ 每一筆都有刪除鈕", d.getElementById("sessionList").innerHTML.includes("deleteSession("));
+  E("deleteSession('k1')");
+  check("✨ 刪掉那一筆真的不見了", E("sessions.length")===1 && E("sessions[0].id")==="k2");
+  check("✨ 刪除紀錄有立墓碑", E("tombs.session['k1']")>0);
+  check("✨ 刪掉的紀錄畫面上也不見了", !d.getElementById("sessionList").textContent.includes("2026-06-01"));
+  w.__revive={app:"pomodoro-whitenoise",version:4,tasks:[],favMixes:[],presets:[],waterLog:{},
+    sessions:[{id:'k1',d:'2026-06-01',m:25,t:9},{id:'k2',d:'2026-06-02',m:50,t:10}]};
+  E("mergeBackup(window.__revive)");
+  check("✨ 刪掉的紀錄不會被舊備份救回來", E("sessions.length")===1 && !E("sessions.some(x=>x.id==='k1')"),
+    E("JSON.stringify(sessions.map(x=>x.id))"));
+  // 舊紀錄(沒有 id)要能補出「兩台算起來一樣」的 id,否則刪不掉也會變成重複
+  const legacyStore={"pomo_sessions":JSON.stringify([
+    {d:"2026-05-01",m:25,t:9},{d:"2026-05-01",m:25,t:9},{d:"2026-05-02",m:50,t:14}])};
+  const domA=makeDom(legacyStore), domB=makeDom(legacyStore);
+  await sleep(300);
+  const idsA=domA.window.eval("JSON.stringify(sessions.map(x=>x.id))");
+  const idsB=domB.window.eval("JSON.stringify(sessions.map(x=>x.id))");
+  check("✨ 舊紀錄會自動補上 id", !idsA.includes("null") && !idsA.includes("undefined"), idsA);
+  check("✨ 兩台裝置補出來的 id 一樣(否則會變成重複)", idsA===idsB, idsA+" vs "+idsB);
+  check("✨ 同一天同時段的兩筆各自有不同 id", JSON.parse(idsA)[0]!==JSON.parse(idsA)[1]);
+  domA.window.close(); domB.window.close();
+
+  // ── 任務時間統計 ──
+  E("tasks=[{id:'tA',name:'讀書',done:false,pomos:0,est:0,createdAt:1},{id:'tB',name:'寫程式',done:false,pomos:0,est:0,createdAt:1}];");
+  // ⚠️ 故意讓「時間少的任務」先出現。若照插入順序排,寫程式會排前面 →
+  //    這樣才驗得到真的有依時間排序(第一版沒這樣寫,拿掉排序也照樣綠)
+  E("sessions=[{id:'s2',d:todayStr(),m:25,t:10,task:'tB'},{id:'s1',d:todayStr(),m:50,t:9,task:'tA'},"
+    + "{id:'s3',d:todayStr(),m:25,t:11,task:'tA'},{id:'s4',d:todayStr(),m:10,t:12}];");
+  E("setTaskStatRange(30)");
+  const tt=d.getElementById("taskTimeList").textContent;
+  check("✨ 任務時間統計算得出來", tt.includes("讀書") && tt.includes("寫程式"), tt.slice(0,70));
+  check("✨ 花最多時間的排最前面", tt.indexOf("讀書") < tt.indexOf("寫程式"));
+  check("✨ 讀書合計 1 小時 15 分", tt.includes("1 小時 15 分"), tt.slice(0,70));
+  check("✨ 沒指定任務的也算得到", tt.includes("沒有指定任務"));
+  check("✨ 有顯示這段期間的總時數", tt.includes("共專注"));
+  E("sessions.push({id:'sOld',d:todayStr(-200),m:999,t:9,task:'tA'}); setTaskStatRange(30);");
+  check("✨ 「最近 30 天」不會算到 200 天前的",
+    d.getElementById("taskTimeList").textContent.includes("1 小時 15 分")
+    && d.getElementById("taskTimeList").textContent.includes("共專注 1 小時 50 分"),
+    d.getElementById("taskTimeList").textContent.slice(0,80));
+  E("setTaskStatRange(0)");
+  check("✨ 切到「全部」就會算進去", d.getElementById("taskTimeList").textContent.includes("小時"));
+  E("setTaskStatRange(30); sessions=[]; tasks=[]; saveData();");
+
+  // ── 雲端「以前的備份」 ──
+  E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'T'})); ghSetAuto(false); ghRender();");
+  check("✨ 雲端卡片有「看以前的備份」按鈕",
+    d.getElementById("ghCard").innerHTML.includes("ghShowHistory()"));
+  E("sessions=[{id:'v1',d:'2026-06-01',m:25,t:9}]; saveData(); ghDoUpload();"); await sleep(200);
+  E("sessions=[{id:'v1',d:'2026-06-01',m:25,t:9},{id:'v2',d:'2026-06-02',m:25,t:9}]; saveData(); ghDoUpload();"); await sleep(200);
+  E("ghShowHistory()"); await sleep(250);
+  check("✨ 列得出以前的備份版本", d.getElementById("ghHistory").innerHTML.includes("ghRestore("),
+    d.getElementById("ghHistory").textContent.slice(0,60));
+  E("sessions=[]; saveData();");   // 模擬「資料被誤刪光了」
+  E("ghRestore('sha1','測試版本')"); await sleep(250);
+  check("✨ 可以還原成以前的版本(救回被蓋掉的資料)",
+    E("sessions.length")===1 && E("sessions[0].id")==="v1", E("JSON.stringify(sessions.map(x=>x.id))"));
+  check("✨ 還原後歷史清單會收起來", d.getElementById("ghHistory").style.display==="none");
+  E("localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); sessions=[]; saveData(); ghRender();");
+
   // 11.55 🔍 全面體檢計數與指令
   const auditFile = path.join(__dirname, "..", "audit-info.js");
   check("體檢計數檔存在", fs.existsSync(auditFile));
@@ -648,6 +730,8 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("體檢指令有防造假條款", prompt.includes("一字不差地引用") && prompt.includes("寧可只交 3 條真的"));
   check("體檢指令有「規格可能是錯的」條款", prompt.includes("覺得我的規格哪一條是錯的"));
   check("體檢指令交代收尾要寫「全面稽核」", prompt.includes("全面稽核"));
+  check("體檢指令要求做突變測試", prompt.includes("突變測試") && prompt.includes("確認真的變紅"));
+  check("體檢指令要求修的人不能自己驗收", prompt.includes("修的人不可以自己驗收"));
   // 真的走一次沒有 clipboard API 的路徑,驗完整指令有被送出去
   w.__copiedText=null;
   E("navigator.clipboard=undefined;"
