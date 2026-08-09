@@ -2,7 +2,7 @@
 // 產生者:scripts/gen-audit-info.mjs(跑 npm test 時會自動更新)
 // 用途:讓 App 顯示「距離上次全面體檢累積了幾次改動」,達標時主動提醒。
 window.AUDIT_INFO = {
-  count: 2,              // 未體檢的實質改動數
+  count: 3,              // 未體檢的實質改動數
   threshold: 10,              // 達到這個數字就提醒
   lastAuditDate: "2026-08-09"   // 上次全面體檢的日期(從沒做過就是 null)
 };
