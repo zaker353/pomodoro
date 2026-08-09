@@ -478,7 +478,7 @@
         <input type="number" id="taskEst" placeholder="預🍅" min="1" max="50" style="flex:0 0 74px" title="預估要幾顆番茄(可不填)">
         <button onclick="addTask()">新增</button>
       </div>
-      <div class="hint-line">💡 「預🍅」=預估這件事要幾顆番茄(可不填)。做完對照實際花幾顆,估得越準代表你越了解自己。點任務左邊的圓圈=設為目前任務;點 ☀️ =排進「今日待辦」,計時頁就只會顯示今天要做的。</div>
+      <div class="hint-line">💡 「預🍅」=預估這件事要幾顆番茄(可不填)。做完對照實際花幾顆,估得越準代表你越了解自己。按 ✏️ 可以改任務名字(不會弄掉已累積的番茄數)。點任務左邊的圓圈=設為目前任務;點 ☀️ =排進「今日待辦」,計時頁就只會顯示今天要做的。</div>
       <div id="taskList"></div>
     </section>
     <section>
@@ -829,7 +829,8 @@
           <b>救命功能:</b>萬一資料被誤刪或被別台蓋掉,按「🕘 看以前的備份」可以挑一個時間點還原——每次上傳都會在你的 GitHub 倉庫留一份歷史,不會只剩最新的那份。<br><br>
           <b>日常用法:</b>設定完成後<b>什麼都不用做</b>——「⚡ 全自動同步」預設開啟:每次打開 App 自動從雲端下載合併,紀錄有變動後約 90 秒自動上傳,切到別的 App 時也會盡力上傳一次。手動三顆按鈕隨時可用;「下載並覆蓋」只有新裝置第一次還原時才用。<br><br>
           <b>刪除也會同步:</b>你在手機刪掉的任務、音效組合、自訂情境,電腦同步後也會跟著消失,不會被另一台的舊備份救回來。<br><br>
-          <b>設定也會同步:</b>專注時長、每日目標、健康提醒、音量、專注音效組合這些,以「最後修改的那台」為準。專注紀錄和任務則是兩邊相加,不會互相蓋掉。
+          <b>設定也會同步:</b>專注時長、每日目標、健康提醒、音量、專注音效組合這些,以「最後修改的那台」為準。<br><br>
+          <b>編輯過的東西也會同步:</b>任務改名、按「復原」重新開啟任務、修改自訂情境或音效組合,都以「最後修改的那台」為準,不會被另一台的舊資料蓋回去。專注紀錄則是兩邊相加,不會互相蓋掉。
         </div>
       </details>
     </section>
@@ -1008,6 +1009,28 @@ let autoBreakMix=false;
    時間戳是自動維護的:saveData() 每次比對快照,真的變了才更新——
    靠人記得呼叫遲早會漏(CLAUDE.md 第 22 條的閘門)。 */
 let settingsAt=0, settingsSnap="";
+/* 每一筆任務/音效組合/自訂情境的「最後修改時間」。合併時取較新的整筆,
+   否則編輯過的內容永遠傳不到另一台(改名字、改情境時長、重新開啟任務都收不到)。
+   跟設定時間戳一樣是自動維護的:saveData() 比對快照,真的變了才動。 */
+let itemSnap={};
+function itemBody(it){
+  const o={}; for(const k in it) if(k!=="updatedAt") o[k]=it[k];
+  return JSON.stringify(o);
+}
+function itemKey(kind,it){ return kind+":"+(kind==="fav" ? favKey(it) : it.id); }
+// seed=true 只記快照不蓋時間(載入時用),否則改過的就蓋上新時間
+function touchChangedItems(seed){
+  const now=Date.now();
+  [["task",tasks],["fav",favMixes],["preset",presets]].forEach(([kind,arr])=>{
+    (arr||[]).forEach(it=>{
+      if(!it) return;
+      const k=itemKey(kind,it), body=itemBody(it);
+      if(itemSnap[k]===body) return;
+      itemSnap[k]=body;
+      if(!seed) it.updatedAt=Math.max(now, (+it.updatedAt||0)+1);
+    });
+  });
+}
 function settingsSnapshot(){ return JSON.stringify([settings, mixVol, focusMix]); }
 let toastTimer=null;
 function toast(msg){
@@ -1098,6 +1121,7 @@ function load(){
   try{ focusMix=JSON.parse(localStorage.getItem("pomo_focusmix")||"null"); }catch(e){ focusMix=null; }
   try{ tombs=sanitizeTombs(JSON.parse(localStorage.getItem("pomo_tombs")||"null")); }catch(e){ tombs=emptyTombs(); }
   migrateSessionIds();
+  itemSnap={}; touchChangedItems(true);   // 載入時只記快照,不要把每筆都蓋上「剛剛改過」
   settingsAt=parseInt(localStorage.getItem("pomo_settingsat")||"0",10)||0;
   settingsSnap=settingsSnapshot();
 }
@@ -1118,6 +1142,7 @@ function migrateSessionIds(){
   return changed;
 }
 function saveData(){
+  touchChangedItems(false);   // 有改到的項目自動蓋上新的修改時間
   localStorage.setItem("pomo_settings", JSON.stringify(settings));
   localStorage.setItem("pomo_sessions", JSON.stringify(sessions));
   localStorage.setItem("pomo_tasks", JSON.stringify(tasks));
@@ -2036,6 +2061,17 @@ function reopenTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   t.done=false; saveData(); renderTasks();
 }
+function renameTask(id){
+  const t=tasks.find(x=>x.id===id); if(!t) return;
+  const name=prompt("改成什麼名字?", t.name);
+  if(name===null) return;                       // 按取消
+  const clean=name.trim().slice(0,50);
+  if(!clean){ toast("名字不能空白"); return; }
+  if(clean===t.name) return;
+  t.name=clean;
+  saveData(); renderTasks(); renderStats();     // 統計頁的任務名稱也要跟著換
+  toast("已改名為「"+clean+"」");
+}
 function deleteTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   if(!confirm("刪除任務「"+t.name+"」?(已記錄的專注時間不會消失)")) return;
@@ -2057,12 +2093,14 @@ function renderTasks(){
       +'<div class="tname">'+(isTodayTask(t)?"☀️ ":"")+escapeHtml(t.name)+'</div>'
       +'<div class="tcount">'+taskCountLabel(t)+'</div>'
       +'<button class="tbtn today-btn" title="排進/移出今日待辦">☀️</button>'
+      +'<button class="tbtn rename-btn" title="改名字">✏️</button>'
       +'<button class="tbtn">✓ 完成</button>';
     el.querySelector(".pick").onclick=()=>pickTask(t.id===activeTask?null:t.id);
     const tb=el.querySelector(".today-btn");
     tb.style.opacity=isTodayTask(t)?"1":"0.35";
     tb.onclick=()=>toggleToday(t.id);
-    el.querySelectorAll(".tbtn")[1].onclick=()=>completeTask(t.id);
+    el.querySelector(".rename-btn").onclick=()=>renameTask(t.id);
+    el.querySelectorAll(".tbtn")[2].onclick=()=>completeTask(t.id);
     list.appendChild(el);
   });
   if(fin.length===0) done.innerHTML='<div class="empty-note">完成的任務會出現在這裡</div>';
@@ -2957,18 +2995,36 @@ function mergeBackup(data){
   });
   sessions.sort((a,b)=>a.d<b.d?-1:(a.d>b.d?1:0));
   // ③ 任務:取聯集,但跳過已刪的
+  /* 任務:同一筆取「較新修改」的那一版整筆換掉。
+     原本是「只新增不更新」,而且 done 只會變 true —— 在電腦上按「復原」把任務
+     重新開啟,下次同步又被打回已完成,看起來像任務自己完成了;改名字也永遠
+     傳不到另一台(2026-08-09 稽核找到,08-10 修)。
+     例外:pomos(累積的番茄數)取較大值,那是累積量不該倒退。 */
   (data.tasks||[]).forEach(rt=>{
     if(isTombed("task", rt.id, rt.createdAt)) return;
-    const local=tasks.find(t=>t.id===rt.id);
-    if(!local) tasks.push(rt);
+    const i=tasks.findIndex(t=>t.id===rt.id);
+    if(i<0){ tasks.push(rt); return; }
+    const local=tasks[i], lu=+local.updatedAt||0, ru=+rt.updatedAt||0;
+    const pom=Math.max(local.pomos||0, rt.pomos||0);
+    if(ru>lu) tasks[i]={...rt, pomos:pom};
     else{
-      local.pomos=Math.max(local.pomos||0, rt.pomos||0);
-      if(rt.done) local.done=true;
+      local.pomos=pom;
       if(!local.est && rt.est) local.est=rt.est;
     }
   });
-  (data.favMixes||[]).forEach(f=>{ if(isTombed("fav",favKey(f),f.createdAt)) return; if(!favMixes.some(x=>x.name===f.name)) favMixes.push(f); });
-  (data.presets||[]).forEach(p=>{ if(isTombed("preset",p.id,p.createdAt)) return; if(!presets.some(x=>x.id===p.id)) presets.push(p); });
+  // 音效組合/自訂情境同理:編輯過的內容要傳得到另一台
+  (data.favMixes||[]).forEach(f=>{
+    if(isTombed("fav",favKey(f),f.createdAt)) return;
+    const i=favMixes.findIndex(x=>favKey(x)===favKey(f));
+    if(i<0){ favMixes.push(f); return; }
+    if((+f.updatedAt||0) > (+favMixes[i].updatedAt||0)) favMixes[i]=f;
+  });
+  (data.presets||[]).forEach(p=>{
+    if(isTombed("preset",p.id,p.createdAt)) return;
+    const i=presets.findIndex(x=>x.id===p.id);
+    if(i<0){ presets.push(p); return; }
+    if((+p.updatedAt||0) > (+presets[i].updatedAt||0)) presets[i]=p;
+  });
   // ④ 反過來:別台裝置刪掉的,這台也要跟著消失,否則這台一上傳又把它送回去,永遠刪不掉
   sessions=sessions.filter(x=>!(x && x.id) || !isTombed("session", x.id, x.createdAt));
   tasks=tasks.filter(t=>!isTombed("task", t.id, t.createdAt));

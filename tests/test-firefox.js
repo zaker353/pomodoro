@@ -127,6 +127,14 @@ function startServer(){
     check("🦊 打字新增任務,畫面真的出現", listText.includes("實測任務A"), listText.slice(0,60));
     check("新任務有記建立時間(墓碑要用)", await val("tasks[tasks.length-1].createdAt>0"));
 
+    /* ---------- 真的按改名鈕 ---------- */
+    await js("window.prompt=()=>'改好的名字';");
+    await clickSafely(By.css("#taskList .rename-btn"));
+    await driver.sleep(250);
+    check("🦊 按改名鈕真的改得動,畫面也換了",
+      (await driver.findElement(By.id("taskList")).getText()).includes("改好的名字"),
+      (await driver.findElement(By.id("taskList")).getText()).slice(0,60));
+
     /* ---------- 真的按刪除鈕 ---------- */
     const delId = await val("tasks[tasks.length-1].id");
     await js("deleteTask(" + JSON.stringify(delId) + ")");

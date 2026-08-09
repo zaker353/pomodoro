@@ -698,6 +698,89 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("✨ 還原後歷史清單會收起來", d.getElementById("ghHistory").style.display==="none");
   E("localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); sessions=[]; saveData(); ghRender();");
 
+  // 11.549 🔁 2026-08-10 編輯過的東西要能跨裝置同步(取較新的那一版)
+  E("tasks=[]; favMixes=[]; presets=[]; sessions=[]; tombs=emptyTombs(); saveData();");
+  // ① 修改過的項目會自動蓋上時間,沒動的不會
+  E("tasks=[{id:'m1',name:'原名',done:false,pomos:1,est:0,createdAt:1},"
+    + "{id:'m2',name:'沒動它',done:false,pomos:0,est:0,createdAt:1}]; saveData();");
+  const m2At=E("tasks[1].updatedAt");
+  E("tasks[0].name='新名字'; saveData();");
+  check("🔁 改過的項目會蓋上新的修改時間", E("tasks[0].updatedAt")>0);
+  check("🔁 沒動到的項目時間不會被亂動", E("tasks[1].updatedAt")===m2At,
+    m2At+" → "+E("tasks[1].updatedAt"));
+  // ② 「復原」的任務不可以被舊備份打回已完成
+  E("tasks=[{id:'r1',name:'任務',done:true,pomos:2,est:0,createdAt:1}]; saveData();");
+  E("reopenTask('r1'); saveData();");
+  check("🔁 復原後 done 變 false(前提檢查)", E("tasks[0].done")===false);
+  w.__oldDone={app:"pomodoro-whitenoise",version:4,sessions:[],favMixes:[],presets:[],waterLog:{},
+    tasks:[{id:'r1',name:'任務',done:true,pomos:2,est:0,createdAt:1,updatedAt:1000}]};
+  E("mergeBackup(window.__oldDone)");
+  check("🔁 復原的任務不會被舊備份打回已完成", E("tasks[0].done")===false,
+    "done="+E("tasks[0].done")+" localAt="+E("tasks[0].updatedAt"));
+  // ③ 另一台比較新的修改要傳得過來(改名 + 標記完成)
+  w.__newerTask={app:"pomodoro-whitenoise",version:4,sessions:[],favMixes:[],presets:[],waterLog:{},
+    tasks:[{id:'r1',name:'另一台改的名字',done:true,pomos:5,est:3,createdAt:1,updatedAt:Date.now()+60000}]};
+  E("mergeBackup(window.__newerTask)");
+  check("🔁 另一台較新的改名會同步過來", E("tasks[0].name")==="另一台改的名字", E("tasks[0].name"));
+  check("🔁 另一台較新的完成狀態也會同步", E("tasks[0].done")===true);
+  check("🔁 番茄數取較大值,不會倒退", E("tasks[0].pomos")===5, "pomos="+E("tasks[0].pomos"));
+  // ⚠️ 上面那筆對方剛好比較多,分不出「取較大值」還是「直接吃對方的」。
+  //    要用「對方比較新、但番茄數比較少」才驗得到(第一版就漏了這個角度)。
+  w.__fewerPomo={app:"pomodoro-whitenoise",version:4,sessions:[],favMixes:[],presets:[],waterLog:{},
+    tasks:[{id:'r1',name:'另一台改的名字',done:true,pomos:1,est:3,createdAt:1,updatedAt:Date.now()+120000}]};
+  E("mergeBackup(window.__fewerPomo)");
+  check("🔁 對方較新但番茄數較少時,不會把累積打掉", E("tasks[0].pomos")===5,
+    "pomos="+E("tasks[0].pomos")+"(應為 5)");
+  // ④ 自訂情境編輯後要同步
+  E("presets=[{id:'pz',icon:'🎓',name:'舊情境',work:25,short:5,rounds:0,mix:null,createdAt:1}]; saveData();");
+  w.__newerPreset={app:"pomodoro-whitenoise",version:4,sessions:[],tasks:[],favMixes:[],waterLog:{},
+    presets:[{id:'pz',icon:'🔥',name:'改過的情境',work:45,short:9,rounds:0,mix:null,createdAt:1,updatedAt:Date.now()+60000}]};
+  E("mergeBackup(window.__newerPreset)");
+  check("🔁 情境編輯後會同步(不是只新增)",
+    E("presets[0].name")==="改過的情境" && E("presets[0].work")===45,
+    E("presets[0].name")+"/"+E("presets[0].work"));
+  // ⑤ 音效組合編輯後要同步
+  E("favMixes=[{id:'fz',name:'我的組合',mix:{rain:50},createdAt:1}]; saveData();");
+  w.__newerFav={app:"pomodoro-whitenoise",version:4,sessions:[],tasks:[],presets:[],waterLog:{},
+    favMixes:[{id:'fz',name:'我的組合',mix:{rain:90,fire:40},createdAt:1,updatedAt:Date.now()+60000}]};
+  E("mergeBackup(window.__newerFav)");
+  check("🔁 音效組合編輯後會同步", E("favMixes[0].mix.rain")===90 && E("favMixes[0].mix.fire")===40,
+    E("JSON.stringify(favMixes[0].mix)"));
+  // ⑥ 比較舊的一邊不可以蓋掉這台
+  E("tasks=[{id:'w1',name:'這台的名字',done:false,pomos:0,est:0,createdAt:1,updatedAt:Date.now()}]; saveData();");
+  w.__olderTask={app:"pomodoro-whitenoise",version:4,sessions:[],favMixes:[],presets:[],waterLog:{},
+    tasks:[{id:'w1',name:'很舊的名字',done:true,pomos:0,est:0,createdAt:1,updatedAt:1000}]};
+  E("mergeBackup(window.__olderTask)");
+  check("🔁 比較舊的那邊蓋不掉這台", E("tasks[0].name")==="這台的名字" && E("tasks[0].done")===false);
+  // ⑥b 重新開啟 App 不可以把每一筆都蓋上「剛剛改過」——那樣這台會永遠贏,
+  //     別台的修改永遠同步不進來。第一版沒測到這個角度。
+  const keepStore={"pomo_tasks":JSON.stringify([
+    {id:'p1',name:'舊任務',done:false,pomos:2,est:0,createdAt:1,updatedAt:5000}])};
+  const domKeep=makeDom(keepStore); await sleep(300);
+  check("🔁 重開 App 不會把舊項目蓋成「剛剛改過」",
+    domKeep.window.eval("tasks[0].updatedAt")===5000,
+    "updatedAt="+domKeep.window.eval("tasks[0].updatedAt")+"(應為 5000)");
+  // 而且重開後,別台較新的修改要進得來
+  domKeep.window.__nw={app:"pomodoro-whitenoise",version:4,sessions:[],favMixes:[],presets:[],waterLog:{},
+    tasks:[{id:'p1',name:'別台改的',done:false,pomos:2,est:0,createdAt:1,updatedAt:9000}]};
+  domKeep.window.eval("mergeBackup(window.__nw)");
+  check("🔁 重開後別台的修改仍進得來", domKeep.window.eval("tasks[0].name")==="別台改的",
+    domKeep.window.eval("tasks[0].name"));
+  domKeep.window.close();
+
+  // ⑦ 任務改名功能
+  E("tasks=[{id:'n1',name:'打錯字',done:false,pomos:3,est:0,createdAt:1}]; activeTask=null; saveData(); renderTasks();");
+  check("🔁 任務列表有改名鈕", !!d.querySelector("#taskList .rename-btn"));
+  E("window.prompt=()=>'  改好的名字  '; renameTask('n1');");
+  check("🔁 改名成功且前後空白會清掉", E("tasks[0].name")==="改好的名字", "["+E("tasks[0].name")+"]");
+  check("🔁 改名不會弄掉累積的番茄數", E("tasks[0].pomos")===3);
+  check("🔁 改名後畫面跟著更新", d.getElementById("taskList").textContent.includes("改好的名字"));
+  E("window.prompt=()=>'   '; renameTask('n1');");
+  check("🔁 改成空白會被擋下來", E("tasks[0].name")==="改好的名字");
+  E("window.prompt=()=>null; renameTask('n1');");
+  check("🔁 按取消不會改動", E("tasks[0].name")==="改好的名字");
+  E("window.prompt=()=>'我的組合'; tasks=[]; favMixes=[]; presets=[]; activeTask=null; saveData();");
+
   // 11.55 🔍 全面體檢計數與指令
   const auditFile = path.join(__dirname, "..", "audit-info.js");
   check("體檢計數檔存在", fs.existsSync(auditFile));
