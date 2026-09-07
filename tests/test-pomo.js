@@ -897,6 +897,41 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("上週有紀錄→週報自動跳出", d2.getElementById("weekOv").classList.contains("open"), d2.getElementById("weekOvBody").textContent.slice(0,40));
   check("上週摘要卡片顯示", d2.getElementById("weekCard").style.display!=="none");
 
+  // 13. 🧾 備份欄位政策表(2026-09-08 規則審查加)
+  //    CLAUDE.md 第 22/28 條說「新增備份欄位一定要同時決定合併政策」,以前只靠 buildBackupData() 上方一行註解提醒。
+  //    這張表就是「表態」:buildBackupData() 多了一個表上沒有的欄位 → 紅;表上有、備份裡沒有 → 也紅。
+  //    表態的內容對不對(該取較新的別寫成本機優先)這條測不到,要人對著 mergeBackup() 看。
+  //    改這張表時,CLAUDE.md 第 28 條的表要一起改。
+  const BACKUP_FIELD_POLICY = {
+    app:"meta", version:"meta", exportedAt:"meta",
+    sessions:"累加型(有 id 用 id 認人,舊紀錄數份數)", roundCount:"累加型(取較大值)", waterLog:"累加型(逐日取較大值)",
+    settings:"取較新(settingsAt)", mixVol:"取較新(settingsAt)", focusMix:"取較新(settingsAt)", settingsAt:"取較新用的時間戳本身",
+    tasks:"取較新(各自 updatedAt;pomos 取較大值)", favMixes:"取較新(各自 updatedAt)", presets:"取較新(各自 updatedAt)",
+    tombs:"聯集取較晚", activeTask:"在備份裡但不合併(只在該任務消失時清空)"
+  };
+  const backupKeys = Object.keys(E("buildBackupData()"));
+  const noPolicy = backupKeys.filter(k => !(k in BACKUP_FIELD_POLICY));
+  const notInBackup = Object.keys(BACKUP_FIELD_POLICY).filter(k => !backupKeys.includes(k));
+  check("🧾 備份檔每個欄位都在合併政策表上", noPolicy.length===0, noPolicy.length ? ("沒表態:"+noPolicy.join(",")) : "");
+  check("🧾 政策表上的欄位都還在備份檔裡", notInBackup.length===0, notInBackup.length ? ("表上多了:"+notInBackup.join(",")) : "");
+
+  // 14. 🔊 音效四方一致(2026-09-08 規則審查加;CLAUDE.md 第 13 條說的「從單一事實來源推導」就是這條)
+  //    事實來源 = sounds/ 資料夾裡實際有的 mp3。比對:程式 SOUND_FILES、sw.js 的 FILES、README 出處表。
+  //    新增音效漏了任何一處(離線少一種聲音、或沒寫出處)都會紅。
+  const soundDir = path.join(__dirname, "..", "sounds");
+  const mp3s = fs.readdirSync(soundDir).filter(f=>f.endsWith(".mp3")).map(f=>f.replace(/\.mp3$/,"")).sort();
+  const soundFiles = E("SOUND_FILES");
+  const codeKeys = Object.keys(soundFiles).sort();
+  const swTxt = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
+  const swSounds = (swTxt.match(/\.\/sounds\/([a-z]+)\.mp3/g)||[]).map(x=>x.replace(/^\.\/sounds\//,"").replace(/\.mp3$/,"")).sort();
+  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
+  const same = (a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  check("🔊 sounds/ 的 mp3 跟程式 SOUND_FILES 的 key 一致", same(mp3s, codeKeys), "sounds="+mp3s.join(",")+" | code="+codeKeys.join(","));
+  check("🔊 SOUND_FILES 的每個路徑都指向真的存在的檔", Object.values(soundFiles).every(x=>fs.existsSync(path.join(__dirname, "..", x))));
+  check("🔊 sw.js 的 FILES 跟 sounds/ 一致(少一個離線就少一種聲音)", same(mp3s, swSounds), "sw="+swSounds.join(","));
+  const noCredit = mp3s.filter(k=>!(readme.includes("("+k+")") || readme.includes("("+k+"/")));
+  check("🔊 每個音效都在 README 出處表裡", noCredit.length===0, noCredit.length ? ("缺出處:"+noCredit.join(",")) : "");
+
   console.log(results.join("\n"));
   console.log("\n總結:"+(results.length-failed)+"/"+results.length+" 通過"+(failed?"、"+failed+" 個失敗":""));
   process.exit(failed?1:0);
