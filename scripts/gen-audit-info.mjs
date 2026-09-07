@@ -10,6 +10,13 @@
 //   - .gitignore 與 .claude/ 底下的東西(代理定義檔等開發設定,不是 App 的改動)
 // 一個 commit 如果只動了上面這些,就不計入。
 //
+// 兩個 2026-09-08 的修正:
+//   - 「上次全面體檢」只認 commit 訊息的「標題列」含「全面稽核」。原本連內文都算,
+//     而程式註解到處寫「2026-08-09 全面稽核找到」,哪天有人在內文引用一句就會把計數歸零。
+//   - 工作區有「還沒 commit」的實質改動時,先算 +1。原本只數已提交的 commit,
+//     所以部署流程「先跑測試(更新計數)→ 再 commit」寫出來的數字永遠少一,
+//     每次部署都得再補一個「更新體檢計數」的 commit。現在 commit 前後數字一致。
+//
 // 跑法:`node scripts/gen-audit-info.mjs`,或直接 `npm test`(會自動先跑這支)。
 import { execSync } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
@@ -29,20 +36,34 @@ const isTrivial = (f) => f.endsWith(".md")
   || f === ".gitignore"
   || f.startsWith(".claude/");
 
+// 上次全面體檢的 commit:只看標題列(%s),不看內文
 let lastAudit = "";
-try{ lastAudit = git('log --format=%H --grep="全面稽核" -1'); }catch(e){}
+try{
+  const line = git("log --format=%H%x09%s").split(/\r?\n/)
+    .find(l => (l.split("\t")[1] || "").includes("全面稽核"));
+  if(line) lastAudit = line.split("\t")[0];
+}catch(e){}
 
 const range = lastAudit ? (lastAudit + "..HEAD") : "HEAD";
 let hashes = [];
-try{ hashes = git("log --format=%H " + range).split("\n").filter(Boolean); }catch(e){}
+try{ hashes = git("log --format=%H " + range).split(/\r?\n/).filter(Boolean); }catch(e){}
 
 let count = 0;
 for(const h of hashes){
   let files = [];
-  try{ files = git("show --name-only --format= " + h).split("\n").filter(Boolean); }catch(e){}
+  try{ files = git("show --name-only --format= " + h).split(/\r?\n/).filter(Boolean); }catch(e){}
   if(files.length && files.every(isTrivial)) continue;   // 只動了文件/計數檔 → 不算
   count++;
 }
+
+// 工作區還沒 commit 的實質改動(含新檔)算一次
+let dirty = [];
+try{
+  dirty = git("status --porcelain --untracked-files=all").split(/\r?\n/).filter(Boolean)
+    .map(l => l.slice(3).trim().replace(/^"|"$/g, ""))
+    .map(f => f.includes(" -> ") ? f.split(" -> ")[1] : f);
+}catch(e){}
+if(dirty.some(f => !isTrivial(f))) count++;
 
 let lastAuditDate = null;
 if(lastAudit){

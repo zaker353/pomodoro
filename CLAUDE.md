@@ -77,7 +77,7 @@
 **固定分工（2026-09-08 訂，定義檔在 `.claude/agents/`，跟著 git 跨裝置）**：主對話（統籌者）只做規劃、逐條查證代理回報、定案、commit 與部署；耗量大的活派給下面三個角色，派工時直接指名，不用再交代模型：
 - `pomo-auditor`（Opus、high、唯讀）：全面體檢或審查某個面向（資料安全與雲端合併／功能互相衝突／說明過時／只改一邊／離線快取／假防護測試）時**找問題**。
 - `pomo-verifier`（Opus、high、唯讀）：一批修改做完後**獨立驗收**（修好了嗎、修一半、假防護、專案特有連動點：備份欄位與合併政策、墓碑、`sw.js` 的 `FILES` 與版本、README、第八節待辦）。
-- `pomo-fixer`（Sonnet、medium、可改檔不可 commit）：統籌者定案後的**機械修改**（`index.html` 的文案與使用說明分頁、README、測試錨點與守門測試、CLAUDE.md 敘述、依派工單加 `sw.js` 的 `FILES`；版本號由統籌者部署時 +1，修字工不碰）。
+- `pomo-fixer`（Sonnet、medium、可改檔不可 commit）：統籌者定案後的**機械修改**（`index.html` 的文案與設定頁的使用說明、README、測試錨點與守門測試、CLAUDE.md 敘述、依派工單加 `sw.js` 的 `FILES`；版本號由統籌者部署時 +1，修字工不碰）。
   **不派它動**備份／合併／雲端同步那條線（`buildBackupData`、`mergeBackup`、`importBackup`、`saveData`/`load`、墓碑、所有 `gh*`）、計時器狀態機與嚴格模式、音訊引擎；也不讓它決定「新欄位屬於哪一類合併政策」——那是統籌者查證後定案的事。
 
 派工時要守的：

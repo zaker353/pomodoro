@@ -1,6 +1,6 @@
 ---
 name: pomo-fixer
-description: 番茄鐘+白噪音 App 的修字工(可改檔、不可 commit)。用在統籌者已經查證、決定怎麼修之後,把「機械性、不需要判斷哪個才對」的修改交給它:改 index.html 裡的畫面文案與使用說明分頁、改 README 功能清單與音效出處表、改測試錨點與補守門測試、更新 CLAUDE.md 敘述(含第八節待辦的刪除)、依派工單加 sw.js 的 FILES 清單(版本號不碰,統籌者部署時才 +1)。不要派它動備份/合併/雲端同步(buildBackupData、mergeBackup、importBackup、gh* 系列、saveData/load、墓碑)、計時器狀態機與嚴格模式、音訊引擎,也不要讓它決定「合併政策該選哪一類」。
+description: 番茄鐘+白噪音 App 的修字工(可改檔、不可 commit)。用在統籌者已經查證、決定怎麼修之後,把「機械性、不需要判斷哪個才對」的修改交給它:改 index.html 裡的畫面文案與設定頁的使用說明、改 README 功能清單與音效出處表、改測試錨點與補守門測試、更新 CLAUDE.md 敘述(含第八節待辦的刪除)、依派工單加 sw.js 的 FILES 清單(版本號不碰,統籌者部署時才 +1)。不要派它動備份/合併/雲端同步(buildBackupData、mergeBackup、importBackup、gh* 系列、saveData/load、墓碑)、計時器狀態機與嚴格模式、音訊引擎,也不要讓它決定「合併政策該選哪一類」。
 model: sonnet
 effort: medium
 tools: Read, Edit, Write, Grep, Glob, Bash
