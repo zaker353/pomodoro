@@ -1,3 +1,7 @@
 node_modules/
 package-lock.json
 tests/screenshots/
+# .claude/ 整體不進版控(settings.local.json、launch.json 是本機設定),
+# 但 agents/ 的代理定義檔要跟著 git 跨裝置(2026-09-08 訂,比照英文學習與算命 App)
+.claude/*
+!.claude/agents/

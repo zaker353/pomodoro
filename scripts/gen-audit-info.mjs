@@ -7,6 +7,7 @@
 //   - 純文件(*.md)
 //   - audit-info.js 自己(計數器不能數自己)
 //   - scripts/gen-audit-info.mjs 自己
+//   - .gitignore 與 .claude/ 底下的東西(代理定義檔等開發設定,不是 App 的改動)
 // 一個 commit 如果只動了上面這些,就不計入。
 //
 // 跑法:`node scripts/gen-audit-info.mjs`,或直接 `npm test`(會自動先跑這支)。
@@ -24,7 +25,9 @@ const git = (cmd) => execSync("git " + cmd, {cwd: ROOT, encoding: "utf8"}).trim(
 // 不算「實質改動」的檔案
 const isTrivial = (f) => f.endsWith(".md")
   || f === "audit-info.js"
-  || f === "scripts/gen-audit-info.mjs";
+  || f === "scripts/gen-audit-info.mjs"
+  || f === ".gitignore"
+  || f.startsWith(".claude/");
 
 let lastAudit = "";
 try{ lastAudit = git('log --format=%H --grep="全面稽核" -1'); }catch(e){}
