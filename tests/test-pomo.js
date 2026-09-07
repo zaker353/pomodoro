@@ -815,6 +815,8 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("體檢指令交代收尾要寫「全面稽核」", prompt.includes("全面稽核"));
   check("體檢指令要求做突變測試", prompt.includes("突變測試") && prompt.includes("確認真的變紅"));
   check("體檢指令要求修的人不能自己驗收", prompt.includes("修的人不可以自己驗收"));
+  check("體檢指令指名三個固定代理(.claude/agents/)",
+    prompt.includes("找問題派 pomo-auditor、修完驗收派 pomo-verifier、定案後的機械修改派 pomo-fixer。"));
   // 真的走一次沒有 clipboard API 的路徑,驗完整指令有被送出去
   w.__copiedText=null;
   E("navigator.clipboard=undefined;"
