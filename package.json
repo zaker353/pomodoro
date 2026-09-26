@@ -5,6 +5,7 @@
   "description": "番茄鐘+白噪音的離線專注工具(個人自用)",
   "scripts": {
     "audit-count": "node scripts/gen-audit-info.mjs",
+    "review-status": "node scripts/review-status.mjs",
     "test": "node scripts/gen-audit-info.mjs && node tests/test-pomo.js",
     "test:firefox": "node scripts/gen-audit-info.mjs && node tests/test-firefox.js",
     "test:all": "node scripts/gen-audit-info.mjs && node tests/test-pomo.js && node tests/test-firefox.js"

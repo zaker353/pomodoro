@@ -8,6 +8,7 @@
 //   - audit-info.js 自己(計數器不能數自己)
 //   - scripts/gen-audit-info.mjs 自己
 //   - .gitignore 與 .claude/ 底下的東西(代理定義檔等開發設定,不是 App 的改動)
+//   - review-log.json 與它的產生檔 review-log.js(審查日期,不是 App 的改動;2026-09-27 加)
 // 一個 commit 如果只動了上面這些,就不計入。
 //
 // 兩個 2026-09-08 的修正:
@@ -18,10 +19,12 @@
 //     每次部署都得再補一個「更新體檢計數」的 commit。現在 commit 前後數字一致。
 //
 // 跑法:`node scripts/gen-audit-info.mjs`,或直接 `npm test`(會自動先跑這支)。
+// 2026-09-27 起也順手把 review-log.json 重產成 review-log.js(審查紀錄,見 scripts/review-log.mjs)。
 import { execSync } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { generateReviewJs } from "./review-log.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "audit-info.js");
@@ -34,7 +37,9 @@ const isTrivial = (f) => f.endsWith(".md")
   || f === "audit-info.js"
   || f === "scripts/gen-audit-info.mjs"
   || f === ".gitignore"
-  || f.startsWith(".claude/");
+  || f.startsWith(".claude/")
+  || f === "review-log.json"
+  || f === "review-log.js";
 
 // 上次全面體檢的 commit:只看標題列(%s),不看內文
 let lastAudit = "";
@@ -88,3 +93,5 @@ if(before !== body){
 }else{
   console.log("📊 體檢計數:" + count + " / 門檻 " + THRESHOLD + "(沒有變化)");
 }
+
+if(generateReviewJs(ROOT)) console.log("🗓 review-log.js 已從 review-log.json 重產");

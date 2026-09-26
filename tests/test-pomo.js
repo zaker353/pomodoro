@@ -8,6 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 const { TextEncoder, TextDecoder } = require("util");
+const { pathToFileURL } = require("url");
 const { JSDOM } = require("jsdom");
 
 const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
@@ -99,6 +100,7 @@ function makeDom(presetStore){
       // jsdom 預設不會去載入 <script src="audit-info.js">,所以手動把真檔內容灌進去。
       // 用真檔而不是寫死假資料,才驗得到「產生出來的格式 App 真的吃得下」。
       try{ window.eval(fs.readFileSync(path.join(__dirname,"..","audit-info.js"),"utf8")); }catch(e){}
+      try{ window.eval(fs.readFileSync(path.join(__dirname,"..","review-log.js"),"utf8")); }catch(e){}   // 審查紀錄,同上
       if(presetStore) Object.keys(presetStore).forEach(k=>window.localStorage.setItem(k,presetStore[k]));
     }
   });
@@ -931,6 +933,74 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("🔊 sw.js 的 FILES 跟 sounds/ 一致(少一個離線就少一種聲音)", same(mp3s, swSounds), "sw="+swSounds.join(","));
   const noCredit = mp3s.filter(k=>!(readme.includes("("+k+")") || readme.includes("("+k+"/")));
   check("🔊 每個音效都在 README 出處表裡", noCredit.length===0, noCredit.length ? ("缺出處:"+noCredit.join(",")) : "");
+
+  // 15. 🗓 審查紀錄(2026-09-27 加):review-log.json 是單一來源,守格式、日期不在未來、App 與 node 腳本算得一樣
+  //     (改壞 review-log.json 的日期格式、把日期寫到未來、手改 review-log.js、從 sw.js 拿掉它,都驗過會紅)
+  const rl = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "review-log.json"), "utf8"));
+  const tNow = new Date();
+  const TODAY = tNow.getFullYear()+"-"+String(tNow.getMonth()+1).padStart(2,"0")+"-"+String(tNow.getDate()).padStart(2,"0");
+  check("🗓 soonDays 是正整數", Number.isInteger(rl.soonDays) && rl.soonDays>0);
+  check("🗓 至少有一類審查", Array.isArray(rl.categories) && rl.categories.length>0);
+  const rlIds = rl.categories.map(c=>c.id);
+  check("🗓 id 不重複", new Set(rlIds).size===rlIds.length);
+  const rlBad = rl.categories.filter(c=>!(typeof c.id==="string" && /^[a-z][a-z0-9-]*$/.test(c.id)
+    && typeof c.name==="string" && c.name && typeof c.scope==="string" && c.scope.length>10
+    && Number.isInteger(c.intervalDays) && c.intervalDays>0 && typeof c.note==="string"
+    && (c.lastReviewedAt===null || /^\d{4}-\d{2}-\d{2}$/.test(c.lastReviewedAt))));
+  check("🗓 每一類欄位齊全且格式正確", rlBad.length===0, rlBad.map(c=>c.id||"?").join(","));
+  const rlFuture = rl.categories.filter(c=>c.lastReviewedAt && c.lastReviewedAt>TODAY);
+  check("🗓 上次審查日期不在未來", rlFuture.length===0, rlFuture.map(c=>c.id+"="+c.lastReviewedAt).join(","));
+  const rlFake = rl.categories.filter(c=>c.lastReviewedAt && new Date(c.lastReviewedAt+"T00:00:00Z").toISOString().slice(0,10)!==c.lastReviewedAt);
+  check("🗓 日期是真的存在的日子(沒有 2 月 30 日這種)", rlFake.length===0, rlFake.map(c=>c.id).join(","));
+  check("🗓 全面體檢不混進審查類別(它有自己的計數)", !rl.categories.some(c=>/全面體檢|全面稽核/.test(c.name+c.id)));
+  // 產生檔跟來源一致(產生器壞了、或有人手改 review-log.js 就紅)
+  const rlJs = fs.readFileSync(path.join(__dirname, "..", "review-log.js"), "utf8");
+  const rlFromJs = (()=>{ const m=/window\.REVIEW_LOG = ([\s\S]*);\s*$/.exec(rlJs); return m?JSON.parse(m[1]):null; })();
+  check("🗓 review-log.js 跟 review-log.json 內容一致", JSON.stringify(rlFromJs)===JSON.stringify(rl));
+  check("🗓 review-log.js 有進 sw.js 的 FILES(否則離線載不到)", fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8").includes('"./review-log.js"'));
+  // App 內的判定跟 node 腳本(npm run review-status 用的)對同一天算得一樣
+  const rlLib = await import(pathToFileURL(path.join(__dirname, "..", "scripts", "review-log.mjs")).href);
+  const FIX = "2026-10-01";
+  const appStates = E("reviewStatuses("+JSON.stringify(FIX)+").map(r=>r.id+':'+r.state+':'+r.daysLeft+':'+r.dueAt).join('|')");
+  const nodeStates = rlLib.reviewStatuses(rl, FIX).map(r=>r.id+":"+r.state+":"+r.daysLeft+":"+r.dueAt).join("|");
+  check("🗓 App 與 node 腳本對同一天算出同樣的到期狀態", appStates===nodeStates, appStates+" vs "+nodeStates);
+  // 到期判定的四種狀態(用假資料,不依賴今天是幾號)
+  w.__savedRL = w.REVIEW_LOG;
+  E("window.REVIEW_LOG={soonDays:14,categories:["
+    + "{id:'a',name:'甲',scope:'x',intervalDays:30,lastReviewedAt:'2026-01-01',note:'n1'},"
+    + "{id:'b',name:'乙',scope:'x',intervalDays:30,lastReviewedAt:'2026-01-10',note:'n2'},"
+    + "{id:'c',name:'丙',scope:'x',intervalDays:30,lastReviewedAt:'2026-01-30',note:'n3'},"
+    + "{id:'d',name:'丁',scope:'x',intervalDays:30,lastReviewedAt:null,note:'n4'}]};");
+  const rlSt = E("reviewStatuses('2026-02-01').map(r=>r.state).join(',')");
+  check("🗓 到期/快到期/正常/從沒做過 各判對", rlSt==="due,soon,ok,due", rlSt);
+  check("🗓 滿週期當天算到期", E("reviewStatuses('2026-01-31')[0].state")==="due");
+  check("🗓 差一天還不算到期", E("reviewStatuses('2026-01-30')[0].state")==="soon");
+  check("🗓 下次到期日算對", E("reviewStatuses('2026-01-01')[0].dueAt")==="2026-01-31");
+  // 畫面:卡片、橫幅、指令(假資料裡四類今天都到期)
+  E("localStorage.removeItem('pomo_reviewnag'); renderReview(); renderReviewBanner();");
+  const rlCard = d.getElementById("reviewCard").textContent;
+  check("🗓 設定頁卡片列出每一類與它的說明", ["甲","乙","丙","丁","n1","n4"].every(n=>rlCard.includes(n)));
+  check("🗓 卡片標出從沒做過的類別", rlCard.includes("從沒做過"));
+  check("🗓 卡片標出到期的類別數", rlCard.includes("4 類審查到期了"));
+  check("🗓 有到期時計時頁出現橫幅", d.getElementById("reviewBanner").style.display==="block" && d.getElementById("reviewBanner").textContent.includes("4 類審查到期"));
+  E("dismissReviewBanner()");
+  check("🗓 「今天先不看」會收起橫幅並記住今天", d.getElementById("reviewBanner").style.display==="none" && w.localStorage.getItem("pomo_reviewnag")===TODAY);
+  E("localStorage.removeItem('pomo_reviewnag'); window.REVIEW_LOG={soonDays:14,categories:[{id:'a',name:'甲',scope:'x',intervalDays:3650,lastReviewedAt:'2026-01-01',note:''}]}; renderReview(); renderReviewBanner();");
+  check("🗓 沒有到期就不出橫幅", d.getElementById("reviewBanner").style.display==="none");
+  check("🗓 沒有到期時卡片說沒有到期", d.getElementById("reviewCard").textContent.includes("目前沒有到期的審查"));
+  const rlP = E("reviewPrompt('a','2026-02-01')");
+  check("🗓 審查指令帶類別名稱、id、今天日期與更新紀錄的交代",
+    rlP.includes("「甲」審查") && rlP.includes("id 為「a」") && rlP.includes("今天(2026-02-01)") && rlP.includes("review-log.json") && rlP.includes("不要含「全面稽核」"));
+  check("🗓 審查指令指名固定代理", rlP.includes("pomo-auditor") && rlP.includes("pomo-verifier"));
+  check("🗓 不存在的類別不會產生指令", E("reviewPrompt('nope')")==="");
+  // 真的走一次複製(沒有 clipboard API 的路徑)
+  w.__copiedText=null;
+  E("navigator.clipboard=undefined;"
+    + "document.execCommand=function(){var tas=document.getElementsByTagName('textarea');var ta=tas[tas.length-1];window.__copiedText=ta&&ta.value;return true;};"
+    + "copyReviewPrompt('a');");
+  check("🗓 按「指令」真的把整份指令送出去", (w.__copiedText||"").includes("「甲」審查") && (w.__copiedText||"").length>300, "複製了 "+((w.__copiedText||"").length)+" 字");
+  check("🗓 複製後有給回饋", d.getElementById("toast").textContent.includes("審查指令已複製"));
+  E("window.REVIEW_LOG=window.__savedRL; renderReview(); renderReviewBanner();");
 
   console.log(results.join("\n"));
   console.log("\n總結:"+(results.length-failed)+"/"+results.length+" 通過"+(failed?"、"+failed+" 個失敗":""));

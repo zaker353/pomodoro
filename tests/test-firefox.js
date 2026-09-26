@@ -326,6 +326,16 @@ function startServer(){
     fs.writeFileSync(path.join(__dirname, "screenshots", "全面體檢區塊.png"),
       Buffer.from(await driver.takeScreenshot(), "base64"));
 
+    /* ---------- 🗓 審查紀錄:外部檔真的載進來、卡片真的畫出來(2026-09-27) ---------- */
+    check("🦊 審查紀錄檔真的被瀏覽器載進來", await val("!!window.REVIEW_LOG && Array.isArray(window.REVIEW_LOG.categories) && window.REVIEW_LOG.categories.length>0"));
+    const firstReviewName = await val("(window.REVIEW_LOG.categories[0]||{}).name||''");
+    const reviewText = await driver.findElement(By.id("reviewCard")).getText();
+    check("🦊 設定頁真的畫出審查紀錄卡", firstReviewName && reviewText.includes(firstReviewName) && reviewText.includes("指令"), reviewText.slice(0,60));
+    await js("document.getElementById('reviewCard').scrollIntoView({block:'center'})");
+    await driver.sleep(400);
+    fs.writeFileSync(path.join(__dirname, "screenshots", "審查紀錄卡.png"),
+      Buffer.from(await driver.takeScreenshot(), "base64"));
+
     /* ---------- 匯出備份:真的按下去,真的要有檔案掉出來 ---------- */
     // 先放一點資料進去,才驗得出「匯出的內容是對的」
     await js(`

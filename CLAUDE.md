@@ -22,7 +22,10 @@
 - `audit-info.js` — **自動產生，不要手動改**。存「距離上次全面體檢累積幾次改動」，給 App 顯示用。
   （為什麼要獨立成一個檔：寫在 `index.html` 裡的話，更新數字本身就算一次改動，數字會永遠在追自己。）
   ⚠️ 它是外部檔，**新增這類檔案一定要加進 `sw.js` 的 `FILES` 清單**，否則離線時載不到。
-- `scripts/gen-audit-info.mjs` — 產生上面那個檔的腳本，跑 `npm test` 時會自動先跑。
+- `scripts/gen-audit-info.mjs` — 產生上面那個檔的腳本，跑 `npm test` 時會自動先跑（也順手重產下面的 `review-log.js`）。
+- `review-log.json` — **各類審查的上次日期與週期**（單一來源，見第七之二節）。要改日期／週期／說明就改這份。
+- `review-log.js` — **自動產生，不要手動改**。就是 `review-log.json` 包成 `window.REVIEW_LOG` 給 App 讀（`file://` 開檔不能 fetch JSON，所以比照 `audit-info.js`）。也是外部檔，已在 `sw.js` 的 `FILES`。
+- `scripts/review-log.mjs`（審查紀錄的共用判定邏輯與產生器）、`scripts/review-status.mjs`（`npm run review-status` 印各類審查狀態）。
 - `tests/test-pomo.js` — jsdom 假瀏覽器的自動測試（快，每次改完都要跑）。**不要在文件裡寫死幾項**，加測試就會過時；要知道數量就跑一次看總結。
 - `tests/test-firefox.js` — **真實 Firefox** 自動實測（selenium + geckodriver，會真的開 Firefox 打字點按鈕、真的下載匯出檔來檢查）。
 - 我雙擊就能用的：`開啟APP.bat`（打開 App）、`開啟本機伺服器.bat`（用 http://localhost:8931 開 App）、`執行測試.bat`（跑快的那套）、`Firefox實測.bat`（跑真瀏覽器那套）、`看Firefox操作.bat`（同上但會跳出視窗讓我親眼看）。
@@ -209,7 +212,7 @@
     |---|---|
     | 進備份、會合併 | `pomo_settings` `pomo_sessions` `pomo_tasks` `pomo_favmixes` `pomo_mixvol` `pomo_presets` `pomo_focusmix` `pomo_water` `pomo_rounds` `pomo_tombs` `pomo_settingsat` |
     | 進備份、不合併 | `pomo_activeTask` |
-    | 本機專屬（絕不進備份） | `pomo_timer`、`pomo_dailyflags`、`pomo_goalfired`、`pomo_backupnag`、`pomo_auditnag`、`pomo_weekreport`、`pomo_lastexport`、`pomo_ghsync`（雲端設定與金鑰）、`pomo_ghsync_auto`、`pomo_ghsync_status` |
+    | 本機專屬（絕不進備份） | `pomo_timer`、`pomo_dailyflags`、`pomo_goalfired`、`pomo_backupnag`、`pomo_auditnag`、`pomo_reviewnag`（審查橫幅「今天先不看」）、`pomo_weekreport`、`pomo_lastexport`、`pomo_ghsync`（雲端設定與金鑰）、`pomo_ghsync_auto`、`pomo_ghsync_status` |
 
 29. **「取較新」是使用者決定的**：設定類（`settings`／`mixVol`／`focusMix`）於 2026-08-09 決定，任務／音效組合／自訂情境於 08-10 補上。細節一律看第 28 條的表，這裡不重複。
     （這條原本寫「紀錄／任務／音效組合／情境仍是兩邊相加」，跟第 28 條與程式相反，2026-09-08 改掉。）
@@ -236,13 +239,26 @@
     - **門檻：距離上次體檢累積 10 個實質提交。** 這件事**已經自動化了**（2026-08-08）：
       - `scripts/gen-audit-info.mjs` 從 git 紀錄算出次數（已提交的實質 commit 數；工作區有未提交的實質改動時再 +1），寫進 `audit-info.js`。**跑 `npm test` 會自動先跑它**，所以數字不會忘記更新。想單獨看就 `npm run audit-count`。
       - App 設定頁有「🔍 全面體檢」區塊，隨時看得到次數；達標時開 App 會跳提醒（一天最多一次）。
-      - 不算實質改動的：純 `*.md`、`audit-info.js` 自己、`gen-audit-info.mjs` 自己（**計數器不能數自己**）、`.gitignore` 與 `.claude/` 底下的東西（代理定義檔等開發設定，不是 App 的改動；2026-09-08 加）。**純測試（`tests/`）算**實質改動——假防護本身就是體檢對象。
+      - 不算實質改動的：純 `*.md`、`audit-info.js` 自己、`gen-audit-info.mjs` 自己（**計數器不能數自己**）、`.gitignore` 與 `.claude/` 底下的東西（代理定義檔等開發設定，不是 App 的改動；2026-09-08 加）、`review-log.json` 與 `review-log.js`（審查日期，不是 App 的改動；2026-09-27 加）。**純測試（`tests/`）算**實質改動——假防護本身就是體檢對象。
       - 門檻數字寫在 `gen-audit-info.mjs` 的 `THRESHOLD`，要改就兩邊一起改。
     - **收尾回報時仍要順手提一下累積數**，不要只依賴 App 的提醒。
     - **體檢收尾的提交訊息「標題列」要包含「全面稽核」四個字**（計數靠它歸零；只看標題，內文提到不算——程式註解到處有這四個字，內文引用一句就歸零太危險，2026-09-08 改）；反過來，一般改動的標題**不要**用這四個字。
     - **標準體檢指令只有一份**，在 `index.html` 的 `AUDIT_PROMPT`（設定頁那顆「📋 複製體檢指令」就是輸出它）。要調整檢查內容就改那裡，不要另外散落副本。
     - **做法照第三節走**：先跑機械掃描（`npm run test:all` + 全庫搜尋）→ 看完結果再決定要派幾個代理、派去查什麼 → 逐條親自查證 → 修完派獨立驗收 → 修掉的問題寫成自動測試。
     ← 證據：**能用腳本做的不要派代理做。** 一次大型檢查吃掉了 5 小時額度的九成，絕大部分耗在「代理重複做腳本就能做的事」——用眼睛數數量、統計分佈、比對標點。
+
+---
+
+# 七之二、審查紀錄與提醒（2026-09-27 訂，比照算命 App）
+
+34. **單一來源 `review-log.json`**：五類審查（規則／功能實測／資料與同步／說明與文案／離線與部署）各記 `lastReviewedAt`、`intervalDays`、`note`、`scope`。設定頁「🗓 審查紀錄」卡（`reviewCard`）、計時頁上方的到期橫幅（`reviewBanner`）、`npm run review-status` 都讀它。判定邏輯在 `index.html` 的 `reviewStatuses()` 與 `scripts/review-log.mjs`（兩邊寫法一樣，測試會拿同一天比對兩邊算得一不一樣）：滿週期＝到期、差 `soonDays`（14）天以內＝快到期、`lastReviewedAt` 是 `null`＝從沒做過＝到期。
+35. **提醒怎麼跑**：有到期的類別，開 App 時計時頁上方出現橫幅（「今天先不看」記在 `pomo_reviewnag`，隔天再出現）；卡片裡每一類有「📋 指令」，複製出來就是給 Claude 的審查派工單（`reviewPrompt()`，含範圍、上次日期、指名 `pomo-auditor`／`pomo-verifier`、做完要更新哪一筆）。**Claude 收尾回報時順手跑 `npm run review-status`**，看到到期或快到期要主動提，不要只依賴 App 的橫幅。
+36. **記錄怎麼更新**：做完某一類審查（不管是我指名、體檢附帶、還是修 bug 順便整輪看過），把那一筆的 `lastReviewedAt` 改成當天、`note` 寫一行做了什麼，**跟那次的修改同一個 commit**；改完跑 `npm test` 會自動重產 `review-log.js`，不要手改它。只做了一部分就不要改日期，寫進 `note` 尾巴（例：「功能實測：只點了計時與混音器，完整清單未做」）。
+    - **全面體檢不記這裡**（它靠 `audit-info.js` 的計數，第七節）；但體檢收尾要把實際涵蓋到的類別日期一起更新（體檢指令 `AUDIT_PROMPT` 已寫這一條）。
+    - 週期是起始值（規則 90、功能實測 60、資料與同步 90、說明與文案 90、離線與部署 120 天），太密或太鬆直接改 JSON；新增類別就在 JSON 加一筆（`id`／`name`／`scope`／`intervalDays`／`lastReviewedAt`／`note`），不用改程式。
+    - 審查的 commit 標題**不要**含「全面稽核」（會把體檢計數歸零）；只改 `review-log.json`／`review-log.js` 的 commit 不算實質改動（第 33 條）。
+    - `tests/test-pomo.js` 守著：JSON 格式、日期不在未來、產生檔與來源一致、有進 `sw.js` 的 `FILES`、App 與 node 腳本判定一致。
+    - 2026-09-27 建檔時的日期是從 git 紀錄照實推的（規則 09-08；功能實測／資料與同步／說明與文案 08-09 那輪全面稽核；離線與部署 07-15 修快取前綴那次），沒做過完整一輪的都在 `note` 寫明只做了哪部分。
 
 ---
 

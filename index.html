@@ -49,6 +49,14 @@
     line-height:1.5;
   }
 
+  /* 審查到期橫幅(計時頁上方)與設定頁審查紀錄卡 */
+  #reviewBanner{display:none; background:var(--card); border-left:4px solid var(--accent); border-radius:12px; padding:10px 12px; margin-bottom:12px; font-size:13px; line-height:1.6; color:var(--text);}
+  #reviewBanner .btns{display:flex; gap:8px; margin-top:8px;}
+  #reviewBanner .btns button{flex:1; padding:7px 4px; border:none; border-radius:10px; cursor:pointer; font-family:inherit; font-size:13px; background:var(--card2); color:var(--text);}
+  #reviewBanner .btns button.main{background:var(--accent); color:#fff;}
+  .review-row{background:var(--card); border-radius:12px; padding:10px 12px; margin-bottom:8px;}
+  .review-head{display:flex; justify-content:space-between; align-items:center; gap:8px;}
+
   /* 情境預設 */
   .presets{display:flex; gap:8px; margin-bottom:12px;}
   .presets button{
@@ -403,6 +411,7 @@
   <!-- ===== 計時分頁 ===== -->
   <div class="tab-page active" id="page-timer">
     <div id="quoteBar"></div>
+    <div id="reviewBanner"></div>
 
     <div class="presets" id="presetRow"></div>
 
@@ -811,6 +820,10 @@
       <div id="auditCard"></div>
     </section>
     <section>
+      <h2>🗓 審查紀錄</h2>
+      <div id="reviewCard"></div>
+    </section>
+    <section>
       <h2>☁️ GitHub 雲端備份(手機↔電腦同步)</h2>
       <div class="set-card" id="ghCard" style="padding:14px 16px"></div>
       <details class="help" style="margin-top:12px">
@@ -982,6 +995,7 @@
 <!-- 體檢計數(自動產生,別手動改)。放外部檔是因為:寫在 index.html 裡的話,
      更新數字本身就算一次改動,數字會永遠在追自己。 -->
 <script src="audit-info.js"></script>
+<script src="review-log.js"></script>
 <script>
 "use strict";
 /* ============ 小工具 ============ */
@@ -3376,6 +3390,7 @@ const AUDIT_PROMPT = [
   "  自己造成的回歸——原本要修「少算」,結果換成「多算」。)",
   "・不同代理對同一件事給出不一致的判斷 = 規格有洞,要回去把規格寫死再一致套用。",
   "・修完派獨立代理驗收,並把修掉的問題寫成自動測試(新測試要故意改壞一次,確認真的會紅燈)。",
+  "・體檢實際涵蓋到的審查類別(資料與同步/說明與文案/功能實測/離線與部署),把 review-log.json 那幾筆的 lastReviewedAt 改成當天、note 寫一行,跟收尾 commit 一起;沒涵蓋到的不要改。",
   "・全部做完後,commit 訊息裡一定要有「全面稽核」四個字(體檢計數靠它歸零)。"
 ].join("\n");
 function renderAudit(){
@@ -3411,6 +3426,88 @@ function fallbackCopy(text, done){
   ok ? done() : toast("❌ 複製失敗,請直接跟 Claude 說「做一次全面體檢」");
 }
 
+/* ============ 🗓 審查紀錄(2026-09-27) ============
+   資料在 review-log.json(單一來源),App 讀的是它產生的 review-log.js(window.REVIEW_LOG)。
+   判定規則跟 scripts/review-log.mjs 一模一樣,測試會拿同一個日期比對兩邊算得一不一樣。
+   全面體檢不在這裡(它靠 audit-info.js 的計數,上面那一區)。 */
+function reviewLog(){
+  const r=(typeof window!=="undefined" && window.REVIEW_LOG)||{};
+  return { soonDays:(+r.soonDays>0)?+r.soonDays:14, categories:Array.isArray(r.categories)?r.categories:[] };
+}
+function reviewYmdToUtc(s){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s)); if(!m) return NaN;
+  return Date.UTC(+m[1],+m[2]-1,+m[3]);
+}
+function reviewUtcToYmd(ms){ return new Date(ms).toISOString().slice(0,10); }
+// 滿週期 = 到期(due);差 soonDays 以內 = 快到期(soon);其餘 ok;從沒做過(null)= 到期
+function reviewStatuses(today){
+  today=today||todayStr();
+  const log=reviewLog(), t=reviewYmdToUtc(today), DAY=86400000;
+  return log.categories.map(c=>{
+    if(!c.lastReviewedAt) return {...c, daysSince:null, daysLeft:-Infinity, dueAt:null, state:"due"};
+    const last=reviewYmdToUtc(c.lastReviewedAt);
+    const daysSince=Math.round((t-last)/DAY), daysLeft=c.intervalDays-daysSince;
+    const state=daysLeft<=0?"due":(daysLeft<=log.soonDays?"soon":"ok");
+    return {...c, daysSince, daysLeft, dueAt:reviewUtcToYmd(last+c.intervalDays*DAY), state};
+  });
+}
+function reviewEsc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+// 給 Claude 的審查派工單(卡片「📋 指令」複製用;做完要回頭更新 review-log.json 的日期)
+function reviewPrompt(id, today){
+  today=today||todayStr();
+  const c=reviewLog().categories.find(x=>x.id===id); if(!c) return "";
+  return [
+    "請對番茄鐘 App(D:\\FORCLAUDE\\番茄鐘+白噪音APP)做一次「"+c.name+"」審查。",
+    "",
+    "【範圍】"+c.scope,
+    "【上次做的時間】"+(c.lastReviewedAt ? c.lastReviewedAt+"("+c.note+")" : "從沒做過")+";這次重點看上次之後的改動(git log 從那天起),但不限於它們。",
+    "",
+    "【規矩】",
+    "1. 先讀 CLAUDE.md,照第二節「連動更新規則」、第三節「派子代理」、第四節「測試與驗證」做:找問題派 pomo-auditor、修完驗收派 pomo-verifier;發現要逐條親自查證,修好的要寫成自動測試並故意改壞一次確認會紅。",
+    "2. 覺得規則、資料或指令哪裡是錯的,一定要明說,不要為了配合它把對的改成錯的。",
+    "3. 做完把 review-log.json 裡 id 為「"+c.id+"」那一筆的 lastReviewedAt 改成今天("+today+")、note 寫一行這次做了什麼,跟這次的修改同一個 commit;commit 標題不要含「全面稽核」四個字(那是體檢計數用的關鍵字)。只做了一部分就不要改日期,寫進 note 尾巴。",
+    "4. 收尾回報:找到什麼、修了什麼、哪些沒修與為什麼、測試數前後、有沒有故意改壞驗證過。"
+  ].join("\n");
+}
+function copyReviewPrompt(id){
+  const text=reviewPrompt(id); if(!text) return;
+  const done=()=>toast("✅ 審查指令已複製,開新對話貼上就行");
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));
+  }else fallbackCopy(text,done);
+}
+function renderReview(){
+  const box=$("reviewCard"); if(!box) return;
+  const rows=reviewStatuses().slice().sort((a,b)=>a.daysLeft-b.daysLeft);
+  const due=rows.filter(r=>r.state==="due").length;
+  const icon={due:"⛔",soon:"⚠️",ok:"✅"};
+  let h='<div class="backup-note" style="margin-bottom:10px'+(due?';color:var(--accent)':'')+'">'
+    +(due ? '⚠️ <b>'+due+' 類審查到期了</b>——按該類的「📋 指令」複製派工單,開新對話貼給 Claude。' : '目前沒有到期的審查。')
+    +'</div>';
+  rows.forEach(r=>{
+    const when = !r.lastReviewedAt
+      ? '<b>從沒做過</b>(週期 '+r.intervalDays+' 天)'
+      : '上次 '+r.lastReviewedAt+'('+r.daysSince+' 天前)・下次 '+r.dueAt+'('+(r.daysLeft<=0 ? '已過期 '+(-r.daysLeft)+' 天' : '還有 '+r.daysLeft+' 天')+')';
+    h+='<div class="review-row" data-id="'+reviewEsc(r.id)+'">'
+      +'<div class="review-head"><span>'+icon[r.state]+' <b>'+reviewEsc(r.name)+'</b></span>'
+      +'<button class="btn" style="flex:0 0 auto;padding:5px 12px;font-size:12px" onclick="copyReviewPrompt(\''+reviewEsc(r.id)+'\')">📋 指令</button></div>'
+      +'<div class="backup-note" style="margin-top:2px">'+when+'<br>'+reviewEsc(r.note)+'</div>'
+      +'</div>';
+  });
+  h+='<div class="backup-note" style="margin-top:10px">做完某一類審查,把 review-log.json 那一筆的日期改成當天、跟那次的修改一起提交,這裡就會更新。全面體檢另有計數,看上面那一區。</div>';
+  box.innerHTML=h;
+}
+function renderReviewBanner(){
+  const b=$("reviewBanner"); if(!b) return;
+  const due=reviewStatuses().filter(r=>r.state==="due");
+  if(!due.length || localStorage.getItem("pomo_reviewnag")===todayStr()){ b.style.display="none"; b.innerHTML=""; return; }
+  b.innerHTML='🗓 <b>'+due.length+' 類審查到期:</b>'+due.map(r=>reviewEsc(r.name)).join('、')+'。到設定頁「審查紀錄」複製指令貼給 Claude。'
+    +'<div class="btns"><button onclick="dismissReviewBanner()">今天先不看</button><button class="main" onclick="goReviewCard()">去看看</button></div>';
+  b.style.display="block";
+}
+function dismissReviewBanner(){ localStorage.setItem("pomo_reviewnag",todayStr()); renderReviewBanner(); }
+function goReviewCard(){ showPage("settings"); const c=$("reviewCard"); if(c) c.scrollIntoView({block:"center"}); }
+
 /* ============ 啟動 ============ */
 load();
 applyTheme();
@@ -3428,6 +3525,8 @@ setInterval(checkReminders,20000);
 checkWeekReport();
 ghRender();
 renderAudit();
+renderReview();
+renderReviewBanner();
 ghAutoDownload(); // 有設定+開啟自動同步時,開 App 自動下載合併
 // 累積夠多改動沒體檢過 → 提醒一次(一天最多一次,不要每次開 App 都煩)
 (function auditNag(){

@@ -24,6 +24,7 @@ color: green
 - `sw.js` 只准動一個地方,而且要派工單有寫:`FILES` 清單加檔。**版本號 `CACHE = CACHE_PREFIX + "vXX"` 不碰**——那是統籌者部署流程的一步,兩邊都加會變 +2。其他行(`CACHE_PREFIX` 過濾、install/activate/fetch)也不碰。
 - `audit-info.js` 是自動產生的,**絕對不手改**;跑 `npm test` 它會自己更新(工作區有未提交改動時數字會先 +1,那是正常的)。
 - 做掉 CLAUDE.md 第八節「待辦」裡的項目時,把那一項從第八節刪掉。
+- 派工單有寫時,可以改 `review-log.json` 那一筆的 `lastReviewedAt`/`note`(審查紀錄,CLAUDE.md 第七之二節);`review-log.js` 是產生檔不手改,跑 `npm test` 會重產。
 - 用 python(`PYTHONUTF8=1`)或 Edit 工具改中文內容;避免在 heredoc 裡寫反斜線 n、反斜線 u 這類跳脫序列(會被吃掉一層),寫完用 `grep -n` 驗證檔案真的是你要的字。
 - 改完一定跑 `npm test`(jsdom,幾秒),綠才算完成;紅的要修到綠,修不掉就如實回報。**動到 `index.html` 的畫面或文字就再跑 `npm run test:firefox`**(真 Firefox、約一分鐘、只開 localhost、全新設定檔,安全),截圖會存在 `tests/screenshots/`,把截圖檔名列進回報讓統籌者親眼看。
 
