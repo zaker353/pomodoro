@@ -634,7 +634,7 @@
         <div class="set-row"><label>每幾輪進入長休息</label><input type="number" id="setEvery" min="2" max="10" onchange="saveSettings()"></div>
         <div class="set-row"><label>每日目標(顆)<span class="hint">計時頁會顯示進度環,設 0 隱藏</span></label><input type="number" id="setGoal" min="0" max="30" onchange="saveSettings()"></div>
         <div class="set-row"><label>結束鈴聲重複次數<span class="hint">怕沒聽到可以調多次(1~5)</span></label><input type="number" id="setChime" min="1" max="5" onchange="saveSettings()"></div>
-        <div class="set-row"><label>嚴格模式<span class="hint">這一輪結束前藏起「跳過」「重設」。可以暫停(有急事要能停),但不能靠「暫停→跳過」偷懶</span></label>
+        <div class="set-row"><label>嚴格模式<span class="hint">這一輪結束前藏起「跳過」「重設」,暫停中也不能換模式、套情境、切正計時。可以暫停(有急事要能停),但不能靠「暫停→再繞路」偷懶</span></label>
           <div class="switch"><input type="checkbox" id="setStrict" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setStrict').click()"></div></div></div>
         <div class="set-row"><label>休息結束自動開始專注</label>
           <div class="switch"><input type="checkbox" id="setAutoWork" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoWork').click()"></div></div></div>
@@ -1012,6 +1012,19 @@ let moodTargetId=null;
 // 這一輪「已經開始、還沒結束」。嚴格模式靠它判斷要不要藏偷懶按鈕——
 // 不能只看 running,否則按一下暫停按鈕就冒出來,「暫停→跳過」兩下就繞過防呆。
 let phaseStarted=false;
+// 這一輪預計的分鐘數。結束時記「這個值」而不是當下的 settings.work——
+// 否則跑到一半把設定從 25 改成 50(或雲端合併進來),這一輪就會記成 50 分鐘的假紀錄(2026-09-28 功能實測抓到)。
+let phaseMin=0;
+// 這一輪還在跑時,雲端合併進來的「正計時開關」變更先押著,等這一輪結束才生效——
+// 倒數中途變正計時畫面會壞掉、正計時中途變倒數會馬上記出一筆假紀錄(2026-09-28 功能實測抓到)。
+let pendingCountUp=null;
+function applyPendingCountUp(){
+  if(pendingCountUp===null) return;
+  settings.countUp=pendingCountUp; pendingCountUp=null;
+  settingsSnap=settingsSnapshot();   // 先把快照更新成套用後的樣子,saveData() 才不會把 settingsAt 蓋成現在——
+  saveData();                        // 這個值是對方的,時間戳也該留對方的,否則另一台之後改的設定會被這台擋掉(驗收抓到)
+  const cb=$("cuToggle"); if(cb) cb.checked=settings.countUp;
+}
 // 慣例連跑需要固定時長才能自動接續,套用有連跑的情境時暫時停用正計時。
 // 用 override 而不是直接改 settings.countUp,才不會把他的設定改掉。
 let countUpOverride=false;
@@ -1226,17 +1239,21 @@ function isCountUpFocus(){ return mode==="focus" && settings.countUp && !countUp
 function switchMode(m, manual){
   // 按到「本來就在的那個模式」不該把進行中的計時歸零。原本沒擋,
   // 專注中誤按快捷鍵 1 就會清掉進度和慣例流程(2026-08-09 全面稽核找到)。
-  if(manual && m===mode && (running||cuActive)) return;
-  if(manual && running && settings.strict){
+  if(manual && m===mode && (running||cuActive||phaseStarted)){   // 暫停中按同一個模式也不動作
+    if(!running) toast(settings.strict ? "🔒 嚴格模式:先完成這一輪再說!" : "這一輪暫停中,要重來請按「重設」");
+    return;
+  }
+  if(manual && (running||phaseStarted) && settings.strict){   // 看 phaseStarted:暫停中也不准換模式(2026-09-28 功能實測抓到可以「先暫停再按 2」繞過)
     toast("🔒 嚴格模式:先完成這一輪再說!"); return;
   }
-  if(manual && running){
-    if(!confirm("計時進行中,確定要切換到「"+modeName(m)+"」嗎?目前這一輪會取消不計入。")) return;
+  if(manual && (running||phaseStarted)){   // 暫停中也算這一輪還沒結束,要問(驗收抓到:暫停中按 2 直接歸零沒問)
+    if(!confirm("這一輪還沒結束,確定要切換到「"+modeName(m)+"」嗎?目前這一輪會取消不計入。")) return;
   }
   if(manual){ routine=null; countUpOverride=false; } // 手動切換=中止慣例流程
   stopTick(); running=false; phaseStarted=false; mode=m;
   cuActive=false; cuAccum=0;
-  remainMs=modeMinutes(m)*60000;
+  applyPendingCountUp();   // 這一輪結束了,押著的正計時開關變更現在生效
+  remainMs=modeMinutes(m)*60000; phaseMin=modeMinutes(m);
   document.documentElement.style.setProperty("--accent", modeColor(m));
   ["tabFocus","tabShort","tabLong"].forEach(id=>$(id).classList.remove("active"));
   $(m==="focus"?"tabFocus":m==="short"?"tabShort":"tabLong").classList.add("active");
@@ -1261,6 +1278,7 @@ function toggleTimer(){
       running=false; stopTick(); releaseWake();
     }else{
       if(remainMs<=0) remainMs=modeMinutes(mode)*60000;
+      if(!phaseStarted) phaseMin=modeMinutes(mode);   // 這一輪的分鐘數在「真的開始」時才定下(驗收抓到:先定再改設定會記錯)
       endAt=Date.now()+remainMs;
       running=true; phaseStarted=true; startTick(); requestWake();
       $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
@@ -1296,7 +1314,7 @@ function followOnFocusStart(){
 function followOnBreakStart(){
   if(!settings.followTimer) return;
   rememberFocusMix();
-  if(settings.breakSound==="stop"){ stopAllSounds(); autoBreakMix=false; }
+  if(settings.breakSound==="stop"){ stopAllSounds(); autoBreakMix=true; }   // 也算「App 安排的休息狀態」:休息中手動開的聲音回到專注時不記成專注組合(驗收抓到)
   else if(settings.breakSound==="ocean"){
     // 用他自己設定的海浪音量,不要硬塞 55 —— applyMix 會把音量寫進 mixVol 存檔,
     // 等於每次休息都把他手調的音量改掉(2026-08-09 稽核找到)
@@ -1308,7 +1326,8 @@ function followOnBreakStart(){
 function resetTimer(){
   stopTick(); running=false; phaseStarted=false;
   cuActive=false; cuAccum=0;
-  remainMs=modeMinutes(mode)*60000;
+  applyPendingCountUp();
+  remainMs=modeMinutes(mode)*60000; phaseMin=modeMinutes(mode);
   $("phaseLabel").textContent = mode==="focus" ? "準備開始專注" : "休息一下吧";
   updateDisplay(); updateButtons(); saveTimerState(); releaseWake();
 }
@@ -1346,7 +1365,7 @@ function finishPhase(){
   playChime(mode==="focus");
   if(navigator.vibrate) navigator.vibrate([200,100,200]);
   notifyPhaseEnd(mode==="focus");
-  advance(true, mode==="focus"?settings.work:0);
+  advance(true, mode==="focus"?(phaseMin||settings.work):0);   // 記這一輪開始時定下的分鐘數
 }
 
 /* ============ 系統通知(背景也看得到) ============ */
@@ -1457,13 +1476,14 @@ function updateButtons(){
 }
 
 function toggleCountUpSetting(cb){
-  if(running){ cb.checked=settings.countUp; toast("計時進行中不能切換,先按暫停或完成"); return; }
+  // 看 phaseStarted 不看 running:暫停中切換會把累積的正計時歸零,嚴格模式下更是繞過防呆的後門
+  if(running||phaseStarted){ cb.checked=settings.countUp; toast(settings.strict ? "🔒 嚴格模式:先完成這一輪再切換" : "這一輪還沒結束,先按完成或重設再切換"); return; }
   settings.countUp=cb.checked; saveData();
   resetTimer();
 }
 
 function saveTimerState(){
-  localStorage.setItem("pomo_timer", JSON.stringify({mode,running,endAt,remainMs,cuActive,cuStart,cuAccum,routine,phaseStarted,countUpOverride}));
+  localStorage.setItem("pomo_timer", JSON.stringify({mode,running,endAt,remainMs,cuActive,cuStart,cuAccum,routine,phaseStarted,countUpOverride,phaseMin,pendingCountUp}));
 }
 function restoreTimerState(){
   let s=null;
@@ -1474,6 +1494,8 @@ function restoreTimerState(){
   routine=(s.routine && s.routine.target)?s.routine:null;
   countUpOverride=!!s.countUpOverride;
   phaseStarted=!!s.phaseStarted;   // 重新整理不可以變成繞過嚴格模式的後門
+  if(phaseStarted && +s.phaseMin>0) phaseMin=+s.phaseMin;   // 只有這一輪已經開始才接回舊值;沒開始的用現在的設定(驗收抓到:改了時長沒開始就關 App,會記成舊的)
+  pendingCountUp = (phaseStarted && (s.pendingCountUp===true || s.pendingCountUp===false)) ? s.pendingCountUp : null;   // 押著的正計時開關也要接回來(重新整理不可以弄丟)
   if(s.cuActive && mode==="focus" && settings.countUp){
     cuActive=true; cuAccum=s.cuAccum||0;
     // 離開太久(關掉分頁/關機)就不把這段算進去,否則會記出假紀錄
@@ -1489,11 +1511,12 @@ function restoreTimerState(){
     remainMs=s.endAt-Date.now(); endAt=s.endAt; running=true; startTick(); requestWake();
     $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
   }else if(s.running && s.endAt<=Date.now()){
-    advance(true, mode==="focus"?settings.work:0); // 關頁面期間走完:算完成
-  }else if(!s.running && s.remainMs>0 && s.remainMs<modeMinutes(mode)*60000){
+    advance(true, mode==="focus"?(phaseMin||settings.work):0); // 關頁面期間走完:算完成
+  }else if(!s.running && s.remainMs>0 && s.remainMs<(phaseStarted&&phaseMin ? phaseMin : modeMinutes(mode))*60000){   // 已開始的一輪跟 phaseMin 比(暫停中把時長調小再重整,剩餘時間不可以變)
     remainMs=s.remainMs;
   }
   updateDisplay(); updateButtons();
+  saveTimerState();   // 上面的 switchMode() 已經把「空狀態」寫回存檔,不補存的話連續重新整理兩次這一輪就消失(第二輪驗收抓到,HEAD 就有)
 }
 
 /* ============ 全螢幕時鐘 ============ */
@@ -1827,8 +1850,9 @@ function stopSoundOne(name){
   updateSoundCard(name);
 }
 function stopAllSounds(){ Object.keys(SOUND_DEFS).forEach(stopSoundOne); }
-// 使用者一動聲音,就不再算是「App 自己開的休息音效」
-function toggleSound(name){ autoBreakMix=false; mixOn[name] ? stopSoundOne(name) : startSound(name); }
+// 專注中使用者一動聲音,就不再算是「App 自己開的休息音效」。休息中動的不算:休息時加個雨聲,
+// 回到專注時原本的組合會被換成「海浪+雨聲」(2026-09-28 功能實測抓到)——休息時挑的聲音只屬於休息。
+function toggleSound(name){ if(mode==="focus") autoBreakMix=false; mixOn[name] ? stopSoundOne(name) : startSound(name); }
 function setSndVol(name,v){
   mixVol[name]=parseInt(v,10);
   if(sndGain[name]) sndGain[name].gain.value=volCurve(mixVol[name]);
@@ -1958,9 +1982,9 @@ function renderPresets(){
 }
 function applyPreset(i){
   const p=presets[i]; if(!p) return;
-  if(running){
+  if(running||phaseStarted){   // 暫停中也算「這一輪還沒結束」
     if(settings.strict){ toast("🔒 嚴格模式:先完成這一輪再切換情境"); return; }
-    if(!confirm("計時進行中,套用情境會取消目前這一輪,確定嗎?")) return;
+    if(!confirm("這一輪還沒結束,套用情境會取消目前這一輪,確定嗎?")) return;
   }
   routine=null; countUpOverride=false;
   settings.work=p.work;
@@ -2148,6 +2172,8 @@ function renderTaskSelect(){
   sel.value=activeTask&&avail.some(t=>t.id===activeTask)?activeTask:"";
 }
 function escapeHtml(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+// 要塞進 onclick="..." 屬性裡的 JS 字串:escapeHtml 不會轉雙引號(文字節點序列化本來就不轉),要自己轉成 &quot;
+function attrJs(v){ return escapeHtml(JSON.stringify(v)).replace(/"/g,"&quot;"); }
 
 /* ============ 統計 ============ */
 function renderStats(){
@@ -2440,7 +2466,9 @@ function renderSessionList(){
       + (s.mood!==undefined ? ' '+["😵","🙂","😃"][s.mood] : '')
       + '</span>'
       + '<button class="btn" style="padding:2px 10px;background:var(--card2);color:var(--dim);font-size:13px" '
-      + 'onclick="deleteSession('+JSON.stringify(s.id)+')">✕</button></div>';
+      // 雙引號要轉成 &quot;,不然 onclick 屬性在第一個引號就結束,按鈕整個按不動
+      // (2026-09-28 功能實測抓到:jsdom 與 Firefox 兩套測試都只直接呼叫函式,從沒真的點過按鈕)
+      + 'onclick="deleteSession('+attrJs(s.id)+')">✕</button></div>';
   }).join("");
 }
 function recordMood(v){
@@ -2629,7 +2657,10 @@ function startNap(){
   const mins=parseInt($("napMin").value,10)||20;
   const snd=$("napSound").value;
   stopAllSounds();
-  if(snd){ const m={}; m[snd]=35; applyMix(m); }
+  if(snd){
+    // 不走 applyMix:它會把 35 寫進 mixVol 存檔並同步出去,等於午睡一次就把他手調的音量改掉(2026-09-28 功能實測抓到)
+    const keep=mixVol[snd]; mixVol[snd]=35; startSound(snd); mixVol[snd]=keep; updateSoundCard(snd);
+  }
   napEndAt=Date.now()+mins*60000;
   $("napOpts").style.display="none"; $("napStartBtn").style.display="none";
   $("napHint").textContent="睡吧,時間到我會輕輕叫你 😌(想提前起來就按關閉)";
@@ -2715,7 +2746,15 @@ function scheduleRem(key){
 }
 function scheduleAllRems(){ Object.keys(REM_DEFS).forEach(scheduleRem); }
 let remHideId=null, remActionFn=null;
+// 開 App 時「備份提醒」(6 秒)和「體檢提醒」(9 秒)會直接互相蓋掉,被蓋掉的那則今天不會再跳
+// (2026-09-28 功能實測抓到)。所以橫幅還在顯示時,新的一則先排隊,關掉或 20 秒到了再跳下一則。
+let remQueue=[];
+// 午睡/呼吸/護眼/伸展畫面開著、或睡眠定時倒數中 = 不要吵他
+function remBusy(){
+  return ["napOv","breathOv","eyeOv","stretchOv"].some(id=>$(id) && $(id).classList.contains("open")) || sleepEndAt>0;
+}
 function fireRem(icon,text,actionLabel,actionFn){
+  if($("remBanner").classList.contains("show")){ if(remQueue.length<5) remQueue.push([icon,text,actionLabel,actionFn]); return; }
   $("remIcon").textContent=icon;
   $("remText").textContent=text;
   const ab=$("remAction");
@@ -2732,7 +2771,11 @@ function fireRem(icon,text,actionLabel,actionFn){
   playDing();
   if(navigator.vibrate) navigator.vibrate(200);
 }
-function hideRem(){ $("remBanner").classList.remove("show"); }
+function hideRem(){
+  $("remBanner").classList.remove("show"); clearTimeout(remHideId);
+  // 排隊的下一則:畫面正忙(午睡等)就先留在隊伍裡,等 checkReminders 那邊不忙了再跳(驗收抓到:午睡中會被排隊的提醒吵醒)
+  if(remQueue.length && !remBusy()){ const n=remQueue.shift(); setTimeout(()=>{ if(remBusy()) remQueue.unshift(n); else fireRem(...n); }, 600); }
+}
 
 /* 喝水量記錄 */
 let waterLog={};
@@ -2756,8 +2799,11 @@ function renderWater(){
 function checkReminders(){
   // 午睡中不要吵他。午睡本來就是「閉眼休息到鬧鈴響」,被久坐/喝水提醒
   // 加上 playDing + 震動叫醒完全違背這個功能(2026-08-09 全面稽核找到)。
-  const napOpen = $("napOv") && $("napOv").classList.contains("open");
-  if(napOpen) return;
+  // 午睡、呼吸練習、護眼、伸展做到一半,或睡眠定時正在倒數(人準備睡了),都不要跳喝水/久坐提醒(2026-09-28 擴大)。
+  // 提早離開也要更新睡眠定時的「剩約 N 分」,那行字只有這裡每 20 秒更新一次(驗收抓到)
+  if(remBusy()){ updateSleepLeft(); return; }
+  // 之前排隊的提醒(橫幅顯示中來的)先補跳,這一輪不再看別的
+  if(remQueue.length && !$("remBanner").classList.contains("show")){ fireRem(...remQueue.shift()); updateSleepLeft(); return; }
   let remShown=false;
   const now=Date.now();
   for(const key in REM_DEFS){
@@ -2816,8 +2862,11 @@ function applyHealthToUI(){
 function buildBackupData(){
   // ⚠️ 新增欄位時,一定要同時決定它在 mergeBackup() 的合併政策(取聯集?取較新?取較大值?),
   //    只加在這裡而忘了那裡 = 這個欄位永遠不會跨裝置同步。
+  // 押著的正計時開關(pendingCountUp)期間,備份要帶「押著的值」而不是本機暫留的舊值——
+  // 否則這台在這一輪結束前上傳的備份會把別台剛改的設定蓋回去,兩台時間戳相同、值卻不同,永遠拉不平(第二輪驗收抓到)
+  const outSettings = pendingCountUp!==null ? {...settings, countUp:pendingCountUp} : settings;
   return {app:"pomodoro-whitenoise", version:4, exportedAt:new Date().toISOString(),
-    settings, sessions, roundCount, tasks, activeTask, favMixes, mixVol, presets, focusMix, waterLog, tombs,
+    settings:outSettings, sessions, roundCount, tasks, activeTask, favMixes, mixVol, presets, focusMix, waterLog, tombs,
     settingsAt};
 }
 function exportBackup(){
@@ -2843,7 +2892,7 @@ function importBackup(input){
       return;
     }
     const ok=confirm("備份檔內容:\n・專注紀錄 "+data.sessions.length+" 筆\n・任務 "+((data.tasks||[]).length)+" 個\n・匯出日期:"+(data.exportedAt||"未知").slice(0,10)
-      +"\n\n匯入會【覆蓋】目前裝置上的紀錄("+sessions.length+" 筆),確定要匯入嗎?");
+      +"\n\n匯入會【覆蓋】目前裝置上的紀錄("+sessions.length+" 筆)"+(phaseStarted?"、進行中的這一輪計時也會重設":"")+",確定要匯入嗎?");
     if(!ok) return;
     applyImport(data);
     toast("✅ 匯入完成!紀錄已還原");
@@ -2873,6 +2922,7 @@ function applyImport(data){
   focusMix=data.focusMix||null;
   // 「覆蓋」= 完全變成備份檔的樣子,墓碑也一起換掉(舊備份沒有 tombs 就清空)
   tombs=sanitizeTombs(data.tombs);
+  pendingCountUp=null;   // 覆蓋 = 完全變成備份檔的樣子,之前押著的正計時開關作廢(驗收抓到)
   settingsAt=parseInt(data.settingsAt,10)||Date.now();   // 覆蓋 = 完全變成備份檔的樣子
   localStorage.setItem("pomo_settingsat", String(settingsAt));
   settingsSnap=settingsSnapshot();
@@ -2963,7 +3013,9 @@ function mergeBackup(data){
   const theirAt=parseInt(data.settingsAt,10)||0;
   if(theirAt>settingsAt && data.settings && typeof data.settings==="object"){
     const ds=data.settings;
+    const prevCountUp=settings.countUp;
     settings={...DEFAULT_SETTINGS, ...ds, health:{}};
+    if(phaseStarted){ pendingCountUp = (settings.countUp!==prevCountUp) ? settings.countUp : null; settings.countUp=prevCountUp; saveTimerState(); }   // 見 pendingCountUp 的說明;每次合併都重算,跟本機一樣就不用押
     for(const k in DEFAULT_SETTINGS.health)
       settings.health[k]={...DEFAULT_SETTINGS.health[k], ...((ds.health&&ds.health[k])||{})};
     if(data.mixVol) for(const k in data.mixVol) if(SOUND_DEFS[k]) mixVol[k]=data.mixVol[k];
@@ -2972,7 +3024,7 @@ function mergeBackup(data){
     localStorage.setItem("pomo_settingsat", String(settingsAt));
     settingsSnap=settingsSnapshot();   // 別讓下面的 saveData() 又把時間戳蓋成現在
     applySettingsToUI(); applyHealthToUI(); applyTheme(); renderSoundGrid(); scheduleAllRems();
-    if(!running){ remainMs=modeMinutes(mode)*60000; updateDisplay(); }
+    if(!phaseStarted){ remainMs=modeMinutes(mode)*60000; phaseMin=modeMinutes(mode); updateDisplay(); }   // 暫停中合併進無關的設定,剩餘時間不可以被重設(驗收抓到)
   }
   /* ② 專注紀錄:有 id 的用 id 認人並過墓碑(2026-08-10 起紀錄可刪除,刪了會立碑),沒 id 的舊紀錄數份數。
      ⚠️ 這裡不能用「字串一樣就當成重複」。紀錄長這樣 {d:日期, m:分鐘, t:小時},
@@ -3194,7 +3246,7 @@ async function ghShowHistory(){
             + 'border-bottom:1px solid var(--line);font-size:13px">'
             + '<span style="flex:1">'+t+'</span>'
             + '<button class="btn" style="padding:2px 10px;background:var(--card2);color:var(--text);font-size:13px" '
-            + 'onclick="ghRestore('+JSON.stringify(c.sha)+','+JSON.stringify(t)+')">還原</button></div>';
+            + 'onclick="ghRestore('+attrJs(c.sha)+','+attrJs(t)+')">還原</button></div>';   // 同 deleteSession:引號要轉義
         }).join("")
       + '<div style="margin-top:8px"><button class="btn" style="background:var(--card2);color:var(--dim)" '
       + 'onclick="ghHideHistory()">關閉</button></div>';
@@ -3337,7 +3389,9 @@ function saveSettings(){
   settings.breakSound=$("setBreakSound").value;
   settings.theme=$("setTheme").checked?"light":"dark";
   saveData(); applySettingsToUI(); renderQuote(); applyTheme(); renderStats(); updateButtons();
-  if(!running){ remainMs=modeMinutes(mode)*60000; updateDisplay(); }
+  // 只有「這一輪還沒開始」才重算剩餘時間。原本看 !running,暫停中只是切一下心情記錄開關,
+  // 剩 3 分鐘就變回 25 分鐘、而且跟存檔對不上(2026-09-28 功能實測抓到)
+  if(!phaseStarted){ remainMs=modeMinutes(mode)*60000; phaseMin=modeMinutes(mode); updateDisplay(); }
 }
 
 /* ============ 🔍 全面體檢提醒 ============
@@ -3490,7 +3544,7 @@ function renderReview(){
       : '上次 '+r.lastReviewedAt+'('+r.daysSince+' 天前)・下次 '+r.dueAt+'('+(r.daysLeft<=0 ? '已過期 '+(-r.daysLeft)+' 天' : '還有 '+r.daysLeft+' 天')+')';
     h+='<div class="review-row" data-id="'+reviewEsc(r.id)+'">'
       +'<div class="review-head"><span>'+icon[r.state]+' <b>'+reviewEsc(r.name)+'</b></span>'
-      +'<button class="btn" style="flex:0 0 auto;padding:5px 12px;font-size:12px" onclick="copyReviewPrompt(\''+reviewEsc(r.id)+'\')">📋 指令</button></div>'
+      +'<button class="btn" style="flex:0 0 auto;padding:5px 12px;font-size:12px;background:var(--card2);color:var(--text)" onclick="copyReviewPrompt(\''+reviewEsc(r.id)+'\')">📋 指令</button></div>'
       +'<div class="backup-note" style="margin-top:2px">'+when+'<br>'+reviewEsc(r.note)+'</div>'
       +'</div>';
   });

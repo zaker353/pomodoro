@@ -274,7 +274,9 @@ function startServer(){
     await driver.sleep(300);
     const slText = await driver.findElement(By.id("sessionList")).getText();
     check("🦊 最近紀錄清單真的畫得出來", slText.includes("50") && slText.includes("讀多益"), slText.slice(0,70));
-    await js("window.confirm=()=>true; deleteSession('q2');");
+    // 真的按畫面上的 ✕(以前這裡直接呼叫函式,按鈕的 onclick 壞了兩個月沒人發現;2026-09-28 功能實測抓到)
+    await js("window.confirm=()=>true;");
+    await clickSafely(By.css("#sessionList button[onclick*='q2']"));
     await driver.sleep(300);
     check("🦊 按刪除後畫面真的少一筆",
       !(await driver.findElement(By.id("sessionList")).getText()).includes("讀多益"),

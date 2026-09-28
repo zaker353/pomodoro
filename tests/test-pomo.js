@@ -519,7 +519,8 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   const flags=JSON.parse(E("JSON.stringify(dailyFlags)"));
   check("🩺 咖啡因提醒不會被就寢提醒無聲蓋掉",
     remTxt.includes("咖啡") && !flags.bed, "顯示的是「"+remTxt.slice(0,16)+"」/ flags="+JSON.stringify(flags));
-  E("checkReminders()");
+  // 兩輪之間橫幅的 20 秒自動收起會先發生(2026-09-28 起橫幅顯示中的新提醒會排隊,不再互相蓋掉),這裡用 hideRem() 模擬
+  E("hideRem(); checkReminders()");
   check("🩺 被延後的那則下一輪會補跳", d.getElementById("remText").textContent.includes("就寢"),
     d.getElementById("remText").textContent.slice(0,20));
   E("window.Date=window.__RealDate; settings.health.caffeine.on=false; settings.health.bed.on=false; dailyFlags={};");
@@ -640,7 +641,8 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   E("sessions=[{id:'k1',d:'2026-06-01',m:25,t:9},{id:'k2',d:'2026-06-02',m:50,t:10}]; tasks=[]; tombs=emptyTombs(); saveData(); renderStats();");
   check("✨ 統計頁列得出最近的紀錄", d.getElementById("sessionList").textContent.includes("2026-06-01"),
     d.getElementById("sessionList").textContent.slice(0,50));
-  check("✨ 每一筆都有刪除鈕", d.getElementById("sessionList").innerHTML.includes("deleteSession("));
+  { const ob=d.querySelector("#sessionList button");
+    check("✨ 每一筆都有刪除鈕", !!ob && ['deleteSession("k1")','deleteSession("k2")'].includes(ob.getAttribute("onclick")), ob ? ob.getAttribute("onclick") : "沒有按鈕"); }
   E("deleteSession('k1')");
   check("✨ 刪掉那一筆真的不見了", E("sessions.length")===1 && E("sessions[0].id")==="k2");
   check("✨ 刪除紀錄有立墓碑", E("tombs.session['k1']")>0);
@@ -1002,6 +1004,154 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("🗓 複製後有給回饋", d.getElementById("toast").textContent.includes("審查指令已複製"));
   E("window.REVIEW_LOG=window.__savedRL; renderReview(); renderReviewBanner();");
 
+  // 16. 🔎 2026-09-28 功能實測(第一次用眼睛整輪點過 + pomo-auditor 從程式面查功能互動)修掉的問題,每一條留一個測試守著
+  //     (每一條都故意改壞驗過會紅)
+  // ── 刪除紀錄鈕 / 雲端還原鈕:真的「按」按鈕,不是直接呼叫函式(以前兩套測試都只呼叫函式,按鈕壞了兩個月沒人發現)
+  E("sessions=[{id:'c1',d:'2026-06-03',m:25,t:9}]; tasks=[]; tombs=emptyTombs(); saveData(); renderStats();");
+  check("🔎 刪除鈕的 onclick 是完整的一句", d.querySelector("#sessionList button").getAttribute("onclick")==='deleteSession("c1")',
+    JSON.stringify(d.querySelector("#sessionList button").getAttribute("onclick")));
+  E("window.confirm=()=>true;");
+  d.querySelector("#sessionList button").click();
+  check("🔎 真的按下 ✕ 會把紀錄刪掉", E("sessions.length")===0 && E("tombs.session['c1']>0"), "sessions="+E("sessions.length"));
+  E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'T'})); ghSetAuto(false); ghRender();");
+  E("sessions=[{id:'r1',d:'2026-06-01',m:25,t:9}]; saveData(); ghDoUpload();"); await sleep(200);
+  E("ghShowHistory()"); await sleep(250);
+  E("window.__rc=null; window.__origRestore=ghRestore; ghRestore=(sha,t)=>{window.__rc=[sha,t];};");
+  d.querySelector("#ghHistory button").click(); await sleep(50);
+  check("🔎 真的按下「還原」會呼叫 ghRestore 並帶到版本", Array.isArray(w.__rc) && typeof w.__rc[0]==="string" && w.__rc[0].length>0, JSON.stringify(w.__rc));
+  E("ghRestore=window.__origRestore; ghHideHistory(); localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); sessions=[]; saveData(); ghRender();");
+  // ── 這一輪的分鐘數在開始時定下:中途改設定不影響
+  E("settings.strict=false; settings.countUp=false; settings.autoStartBreak=false; settings.moodLog=false; settings.microEx=false; settings.work=25; saveData(); applySettingsToUI(); switchMode('focus',false); toggleTimer();");
+  E("settings.work=50; saveData();");
+  E("finishPhase();");
+  check("🔎 跑到一半把專注時長改成 50,這一輪仍記 25 分鐘", E("sessions[sessions.length-1].m")===25, "m="+E("sessions[sessions.length-1].m"));
+  E("switchMode('focus',false); localStorage.setItem('pomo_timer', JSON.stringify({mode:'focus',running:true,endAt:Date.now()-1000,remainMs:0,cuActive:false,cuStart:0,cuAccum:0,routine:null,phaseStarted:true,countUpOverride:false,phaseMin:25})); settings.work=50; saveData(); restoreTimerState();");
+  check("🔎 關著頁面走完的那一輪也記開始時的分鐘數", E("sessions[sessions.length-1].m")===25, "m="+E("sessions[sessions.length-1].m"));
+  check("🔎 每一輪的分鐘數有存進 pomo_timer", JSON.parse(w.localStorage.getItem("pomo_timer")).phaseMin>0);
+  // ── 雲端合併把正計時開關翻過來:這一輪還在跑就押著,結束才生效
+  E("settings.work=25; settings.countUp=false; saveData(); switchMode('focus',false); toggleTimer();");
+  E("window.__m={app:'pomodoro-whitenoise',version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},settingsAt:settingsAt+1000,settings:Object.assign({},settings,{countUp:true})}; mergeBackup(window.__m);");
+  check("🔎 倒數進行中合併進「正計時=開」,這一輪仍是倒數", E("settings.countUp")===false && E("isCountUpFocus()")===false && E("pendingCountUp")===true && E("running")===true);
+  E("finishPhase();");
+  check("🔎 這一輪結束後正計時開關才生效", E("settings.countUp")===true && E("pendingCountUp")===null);
+  E("settings.countUp=false; saveData(); switchMode('focus',false);");
+  // ── 嚴格模式:先暫停再繞也不行
+  E("settings.strict=true; saveData(); switchMode('focus',false); toggleTimer(); toggleTimer();");
+  check("🔎 嚴格模式暫停中(phaseStarted 仍為真)", E("phaseStarted")===true && E("running")===false);
+  E("switchMode('short',true);");
+  check("🔎 嚴格模式暫停中按快捷鍵/分頁換模式會被擋", E("mode")==="focus" && E("phaseStarted")===true);
+  E("window.confirm=()=>true; applyPreset(0);");
+  check("🔎 嚴格模式暫停中套用情境會被擋", E("phaseStarted")===true && E("mode")==="focus");
+  E("var cb={checked:true}; toggleCountUpSetting(cb);");
+  check("🔎 嚴格模式暫停中不能切換正計時(開關彈回)", E("settings.countUp")===false);
+  E("settings.strict=false; saveData(); resetTimer();");
+  // ── 暫停中改設定不重設剩餘時間
+  E("switchMode('focus',false); toggleTimer(); toggleTimer(); remainMs=180000; updateDisplay(); applySettingsToUI(); saveSettings();");
+  check("🔎 暫停中改設定,剩餘時間不會被重設成整輪", E("remainMs")===180000 && E("phaseStarted")===true, "remainMs="+E("remainMs"));
+  E("resetTimer();");
+  // ── 提醒橫幅排隊
+  E("remQueue=[]; hideRem(); fireRem('a','第一則'); fireRem('b','第二則');");
+  check("🔎 橫幅顯示中來了第二則,第一則不會被蓋掉", d.getElementById("remText").textContent==="第一則" && E("remQueue.length")===1);
+  E("hideRem();"); await sleep(700);
+  check("🔎 關掉第一則後第二則才跳出來", d.getElementById("remText").textContent==="第二則" && d.getElementById("remBanner").classList.contains("show"));
+  E("remQueue=[]; hideRem();");
+  // ── 午睡助眠聲不改存檔音量
+  E("mixVol.ocean=80; saveData(); openNap(); document.getElementById('napSound').value='ocean'; startNap();"); await sleep(100);
+  check("🔎 午睡用 35 的音量播,但存檔裡的海浪音量還是 80", E("mixVol.ocean")===80 && JSON.parse(w.localStorage.getItem("pomo_mixvol")).ocean===80 && E("Math.abs(sndGain.ocean.gain.value-volCurve(35))<1e-6"),
+    "mixVol="+E("mixVol.ocean")+" gain="+E("sndGain.ocean&&sndGain.ocean.gain.value"));
+  E("closeNap(); stopAllSounds();");
+  // ── 休息中手動加聲音,專注組合不變
+  E("settings.followTimer=true; settings.breakSound='ocean'; settings.countUp=false; settings.autoStartBreak=false; saveData(); stopAllSounds(); focusMix={cafe:60}; localStorage.setItem('pomo_focusmix',JSON.stringify(focusMix)); switchMode('focus',false); toggleTimer(); finishPhase();");
+  check("🔎 休息開始時 App 自己換成海浪", E("autoBreakMix")===true && E("mixOn.ocean")===true);
+  E("toggleSound('rain');");
+  check("🔎 休息中加雨聲,仍算是 App 開的休息音效", E("autoBreakMix")===true);
+  E("switchMode('focus',false); toggleTimer();");
+  check("🔎 回到專注,專注組合還是原本的咖啡廳", E("JSON.stringify(focusMix)")==='{"cafe":60}' && E("mixOn.rain")!==true, E("JSON.stringify(focusMix)"));
+  E("resetTimer(); stopAllSounds(); settings.followTimer=false; settings.breakSound='keep'; saveData();");
+  // ── 呼吸/護眼/伸展畫面開著、睡眠定時倒數中,健康提醒不跳
+  E("window.__fired=0; window.__origFire=fireRem; fireRem=()=>{window.__fired++;}; settings.health.water.on=true; remNext.water=Date.now()-1; document.getElementById('breathOv').classList.add('open'); checkReminders();");
+  check("🔎 呼吸練習畫面開著時不跳喝水提醒", E("window.__fired")===0);
+  E("document.getElementById('breathOv').classList.remove('open'); sleepEndAt=Date.now()+60000; checkReminders();");
+  check("🔎 睡眠定時倒數中不跳喝水提醒", E("window.__fired")===0);
+  E("sleepEndAt=0; checkReminders();");
+  check("🔎 都關掉之後提醒照常跳(這條測試不是假的)", E("window.__fired")===1);
+  E("fireRem=window.__origFire; remNext.water=0;");
+  // ── 匯入覆蓋:計時進行中,確認視窗會講
+  E("switchMode('focus',false); toggleTimer(); window.__cm=''; window.confirm=(m)=>{window.__cm+=m; return false;};");
+  {
+    const f=new w.File([JSON.stringify({app:"pomodoro-whitenoise",version:4,sessions:[],tasks:[]})],"b.json",{type:"application/json"});
+    const inp=d.getElementById("importFile");
+    Object.defineProperty(inp,"files",{value:[f],configurable:true});
+    E("importBackup(document.getElementById('importFile'))"); await sleep(150);
+  }
+  check("🔎 計時進行中匯入,確認視窗會說這一輪會重設", w.__cm.includes("進行中的這一輪計時也會重設"), w.__cm.slice(0,80));
+  E("window.confirm=()=>true; resetTimer();");
+  // ── 第二輪(pomo-verifier 驗收抓到修復種下的問題),每一條也留一個測試
+  // 還沒開始的一輪:合併進新時長 → 這一輪就該記新時長
+  E("settings.strict=false; settings.countUp=false; settings.autoStartBreak=false; settings.work=25; saveData(); switchMode('focus',false);");
+  E("window.__m2={app:'pomodoro-whitenoise',version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},settingsAt:settingsAt+1000,settings:Object.assign({},settings,{work:50})}; mergeBackup(window.__m2); toggleTimer(); finishPhase();");
+  check("🔎 還沒開始就合併進 50 分鐘,這一輪記 50", E("sessions[sessions.length-1].m")===50, "m="+E("sessions[sessions.length-1].m"));
+  // 改了時長、沒開始就關 App:重開後這一輪用新時長
+  E("settings.work=20; saveData(); switchMode('focus',false); localStorage.setItem('pomo_timer', JSON.stringify({mode:'focus',running:false,endAt:0,remainMs:0,cuActive:false,cuStart:0,cuAccum:0,routine:null,phaseStarted:false,countUpOverride:false,phaseMin:25})); restoreTimerState(); toggleTimer(); finishPhase();");
+  check("🔎 改成 20 分鐘沒開始就關 App,重開跑完記 20 不記舊的 25", E("sessions[sessions.length-1].m")===20, "m="+E("sessions[sessions.length-1].m"));
+  E("switchMode('focus',false); localStorage.setItem('pomo_timer', JSON.stringify({mode:'focus',running:false,endAt:0,remainMs:0,cuActive:false,cuStart:0,cuAccum:0,routine:null,phaseStarted:false,countUpOverride:false,phaseMin:25})); restoreTimerState();");
+  check("🔎 重開 App 時,還沒開始的一輪不接回存檔裡的舊分鐘數", E("phaseMin")===20, "phaseMin="+E("phaseMin"));
+  E("phaseMin=99; toggleTimer();");
+  check("🔎 按「開始」那一刻用現在的設定定下這一輪的分鐘數", E("phaseMin")===20 && E("phaseStarted")===true, "phaseMin="+E("phaseMin"));
+  E("resetTimer();");
+  // 暫停中合併進無關設定,剩餘時間不重設
+  E("settings.work=25; saveData(); switchMode('focus',false); toggleTimer(); toggleTimer(); remainMs=180000; window.__m3={app:'pomodoro-whitenoise',version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},settingsAt:settingsAt+1000,settings:Object.assign({},settings,{dailyGoal:9})}; mergeBackup(window.__m3);");
+  check("🔎 暫停中合併進無關的設定,剩餘時間還是 3 分鐘", E("remainMs")===180000 && E("settings.dailyGoal")===9, "remainMs="+E("remainMs"));
+  E("resetTimer();");
+  // 押著的正計時開關:整份覆蓋作廢、生效時不蓋時間戳、第二次合併重算、重新整理不丟
+  E("settings.countUp=false; saveData(); switchMode('focus',false); toggleTimer(); window.__m4={app:'pomodoro-whitenoise',version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},settingsAt:settingsAt+1000,settings:Object.assign({},settings,{countUp:true})}; mergeBackup(window.__m4);");
+  check("🔎 押著的值有存進 pomo_timer", JSON.parse(w.localStorage.getItem("pomo_timer")).pendingCountUp===true);
+  E("pendingCountUp=null; settings.countUp=false; restoreTimerState();");   // 模擬重新整理:記憶體清空、從 pomo_timer 接回來
+  check("🔎 重新整理後押著的值還在(不會兩台分歧)", E("pendingCountUp")===true && E("settings.countUp")===false && E("phaseStarted")===true);
+  E("window.__m5=Object.assign({},window.__m4,{settingsAt:settingsAt+1000,settings:Object.assign({},settings,{countUp:false})}); mergeBackup(window.__m5);");
+  check("🔎 第二次合併回「關」(跟本機一樣),押著的值清掉", E("pendingCountUp")===null);
+  E("mergeBackup(Object.assign({},window.__m4,{settingsAt:settingsAt+1000}));");
+  check("🔎 再合併進「開」,又押著", E("pendingCountUp")===true && E("settings.countUp")===false);
+  E("window.__at=settingsAt; finishPhase();");
+  check("🔎 押著的值生效時不會把設定時間戳蓋成現在", E("settings.countUp")===true && E("settingsAt")===E("window.__at"), "at="+E("settingsAt")+" vs "+E("window.__at"));
+  E("settings.countUp=false; saveData(); switchMode('focus',false); toggleTimer(); mergeBackup(Object.assign({},window.__m4,{settingsAt:settingsAt+1000}));");
+  check("🔎 (前置)又押著一個「開」", E("pendingCountUp")===true);
+  E("applyImport({app:'pomodoro-whitenoise',version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},settingsAt:1700000000000,settings:Object.assign({},settings,{countUp:false})});");
+  check("🔎 整份覆蓋後 = 備份檔的樣子,押著的值作廢", E("settings.countUp")===false && E("pendingCountUp")===null && E("settingsAt")===1700000000000, "countUp="+E("settings.countUp")+" at="+E("settingsAt"));
+  E("settings.work=25; settings.countUp=false; settings.strict=false; saveData(); resetTimer();");
+  // 睡眠定時的剩餘文字在呼吸畫面開著時也要更新
+  E("sleepEndAt=Date.now()+30*60000; document.getElementById('breathOv').classList.add('open'); document.getElementById('sleepLeft').textContent='舊字'; checkReminders();");
+  check("🔎 呼吸畫面開著時,睡眠定時的「剩約 N 分」照樣更新", d.getElementById("sleepLeft").textContent.includes("30"), d.getElementById("sleepLeft").textContent);
+  E("document.getElementById('breathOv').classList.remove('open'); sleepEndAt=0; updateSleepLeft();");
+  // 排隊的提醒不會在午睡中跳出來,午睡結束後才補跳
+  E("remQueue=[]; hideRem(); fireRem('a','第一則'); fireRem('b','排隊的'); document.getElementById('napOv').classList.add('open'); hideRem();"); await sleep(700);
+  check("🔎 午睡中排隊的提醒不跳", !d.getElementById("remBanner").classList.contains("show") && E("remQueue.length")===1);
+  E("document.getElementById('napOv').classList.remove('open'); checkReminders();");
+  check("🔎 午睡結束後排隊的那則補跳", d.getElementById("remText").textContent==="排隊的" && d.getElementById("remBanner").classList.contains("show"));
+  E("remQueue=[]; hideRem();");
+  // 非嚴格模式暫停中換模式要問;按同一個模式不動作
+  E("switchMode('focus',false); toggleTimer(); toggleTimer(); remainMs=180000; window.__cc=0; window.confirm=()=>{window.__cc++; return false;}; switchMode('short',true);");
+  check("🔎 非嚴格模式暫停中按 2 會先問,取消就不動", E("window.__cc")===1 && E("mode")==="focus" && E("remainMs")===180000);
+  E("switchMode('focus',true);");
+  check("🔎 暫停中按同一個模式不會歸零", E("window.__cc")===1 && E("remainMs")===180000 && E("phaseStarted")===true);
+  E("window.confirm=()=>true; resetTimer();");
+  // 休息音效「自動停止」也適用「休息時挑的聲音只屬於休息」
+  E("settings.followTimer=true; settings.breakSound='stop'; settings.countUp=false; settings.autoStartBreak=false; saveData(); stopAllSounds(); focusMix={cafe:60}; localStorage.setItem('pomo_focusmix',JSON.stringify(focusMix)); switchMode('focus',false); toggleTimer(); finishPhase(); toggleSound('rain'); switchMode('focus',false); toggleTimer();");
+  check("🔎 休息音效設「自動停止」,休息中開雨聲,回到專注仍是咖啡廳", E("JSON.stringify(focusMix)")==='{"cafe":60}' && E("mixOn.rain")!==true, E("JSON.stringify(focusMix)"));
+  E("resetTimer(); stopAllSounds(); settings.followTimer=false; settings.breakSound='keep'; saveData();");
+
+  // ── 第三輪(第二輪驗收抓到)
+  E("settings.countUp=false; saveData(); switchMode('focus',false); toggleTimer(); mergeBackup(Object.assign({},window.__m4,{settingsAt:settingsAt+1000}));");
+  check("🔎 押著期間匯出/上傳的備份帶押著的值(不帶本機暫留的舊值)", E("pendingCountUp")===true && E("buildBackupData().settings.countUp")===true && E("settings.countUp")===false);
+  E("restoreTimerState(); restoreTimerState();");
+  check("🔎 連續重新整理兩次,進行中的這一輪還在", E("running")===true && E("phaseStarted")===true && E("pendingCountUp")===true && JSON.parse(w.localStorage.getItem("pomo_timer")).phaseStarted===true);
+  E("window.confirm=()=>true; resetTimer(); settings.countUp=false; saveData();");
+  E("settings.work=25; saveData(); switchMode('focus',false); toggleTimer(); toggleTimer(); remainMs=22*60000; saveTimerState(); settings.work=20; saveData(); restoreTimerState();");
+  check("🔎 暫停中把時長調小再重新整理,剩餘時間不變(跟這一輪的分鐘數比)", E("remainMs")===22*60000 && E("phaseMin")===25, "remainMs="+E("remainMs/60000")+" phaseMin="+E("phaseMin"));
+  d.getElementById("toast").textContent="";   // 先清掉上一則,免得被前面的提示矇混過去
+  E("switchMode('focus',true);");
+  check("🔎 暫停中按同一個模式會提示要按重設", d.getElementById("toast").textContent.includes("重設") && E("remainMs")===22*60000);
+  E("settings.work=25; saveData(); resetTimer();");
   console.log(results.join("\n"));
   console.log("\n總結:"+(results.length-failed)+"/"+results.length+" 通過"+(failed?"、"+failed+" 個失敗":""));
   process.exit(failed?1:0);
