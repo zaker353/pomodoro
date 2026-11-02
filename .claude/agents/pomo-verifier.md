@@ -29,7 +29,7 @@ color: yellow
    - `audit-info.js` 是自動產生檔:跑一次 `node scripts/gen-audit-info.mjs`,若檔案內容因此改變,代表提交進去的那份是手改的或過期的(正常流程會把重新產生的結果跟改動一起提交,所以 diff 裡有它不算錯);`scripts/gen-audit-info.mjs` 的 `THRESHOLD` 與 CLAUDE.md 第七節一致。
    - 派工單說這批是某一類審查的收尾:`review-log.json` 那一筆的 `lastReviewedAt` 有沒有改成當天、`note` 有沒有寫一行(只做一部分就不該改日期);`review-log.js` 跟 JSON 一致(`npm test` 守著)。
    - 「取較新」類的時間戳:有沒有人在 `saveData()` 之外手動蓋 `settingsAt`/`updatedAt`(該由快照比對自動維護)、蓋時間有沒有用 `Math.max(Date.now(), 舊值+1)`、載入時是不是只 seed 快照(`touchChangedItems(true)`)。
-5. **資料安全回歸**:只要 diff 碰到 `buildBackupData`、`mergeBackup`、`importBackup`、`ghAutoDownload`、`ghAutoUpload`、`ghUpload`、`ghRestore`、`saveData`、`load`、`tombs` 相關或 `deleteSession`,就拿具體情境跑一次:A 機刪任務 → B 機舊備份合併回來,任務不可復活;同一小時兩筆相同 `sessions` 合併後仍是兩筆;新裝置貼完金鑰還沒下載成功就改東西,不可自動上傳(`ghSyncedOk` 仍為 false);另一台時鐘較快時這台的設定改動仍能同步出去。`npm test` 綠燈只是起點,不是結論。
+5. **資料安全回歸**:只要 diff 碰到 `buildBackupData`、`mergeBackup`、`importBackup`、`ghAutoDownload`、`ghAutoUpload`、`ghUpload`、`ghRestore`、`saveData`、`load`、`lsSet`、`tombs` 相關或 `deleteSession`,就拿具體情境跑一次:A 機刪任務 → B 機舊備份合併回來,任務不可復活;同一小時兩筆相同 `sessions` 合併後仍是兩筆;新裝置貼完金鑰還沒下載成功就改東西,不可自動上傳(`ghSyncedOk` 仍為 false);另一台時鐘較快時這台的設定改動仍能同步出去。`npm test` 綠燈只是起點,不是結論。
 
 ## 不可以做的事
 - 不改任何檔、不 commit、不 push、不部署。

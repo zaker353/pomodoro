@@ -401,6 +401,17 @@
     box-shadow:0 4px 20px rgba(0,0,0,.4); text-align:center;
   }
   #toast.show{transform:translateX(-50%) translateY(0); opacity:1;}
+  /* 存檔失敗警告:比提醒橫幅、午睡畫面都高一層,關掉之前一直留著 */
+  #saveFailBar{
+    display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:240;
+    width:calc(100% - 24px); max-width:460px; box-sizing:border-box;
+    background:var(--card); color:var(--text); border:2px solid #e5484d; border-radius:14px;
+    padding:12px 14px; font-size:14px; line-height:1.6; box-shadow:0 6px 24px rgba(0,0,0,.5);
+  }
+  #saveFailBar.show{display:block;}
+  #saveFailBar .btns{display:flex; gap:8px; margin-top:8px;}
+  #saveFailBar .btns button{flex:1; padding:8px 4px; border:none; border-radius:10px; cursor:pointer; font-family:inherit; font-size:13px; background:var(--card2); color:var(--text);}
+  #saveFailBar .btns button.main{background:#e5484d; color:#fff;}
   footer{margin-top:22px; font-size:11px; color:var(--dim); text-align:center; line-height:1.7;}
 </style>
 </head>
@@ -739,7 +750,8 @@
         <div class="help-body">
           1. 健康提醒和計時<b>要在網頁開著的時候</b>才會運作,建議搭配「螢幕保持常亮」使用。<br>
           2. 手機可以用瀏覽器的「加入主畫面」把它變成 App。<br>
-          3. 所有紀錄只存在你這台裝置上(有設定 ☁️ GitHub 雲端備份的話,也會存一份在你自己的私人倉庫),<b>換裝置或清瀏覽器資料前,記得先「匯出備份」</b>。
+          3. 所有紀錄只存在你這台裝置上(有設定 ☁️ GitHub 雲端備份的話,也會存一份在你自己的私人倉庫),<b>換裝置或清瀏覽器資料前,記得先「匯出備份」</b>。<br>
+          4. 萬一這台裝置的瀏覽器存檔空間滿了(同一個網址底下的其他 App 也共用這份空間),畫面最上方會跳出<b>紅框的「存檔失敗」警告</b>:這時剛才的變更還沒存進這台裝置,請先按警告上的「匯出備份」把資料留下來。
         </div>
       </details>
     </section>
@@ -992,6 +1004,11 @@
 
 <div id="toast"></div>
 
+<div id="saveFailBar" role="alert">
+  <div><b>⚠️ 存檔失敗</b>:這台裝置的瀏覽器存檔空間滿了(或被擋住),剛才的變更<b>還沒存進這台裝置</b>,關掉或重新整理 App 就會不見。請先按「匯出備份」把資料存成檔案;有開雲端同步的話,App 也會照常試著上傳到雲端。</div>
+  <div class="btns"><button class="main" onclick="exportBackup()">⬇️ 匯出備份</button><button onclick="hideSaveFail()">知道了</button></div>
+</div>
+
 <!-- 體檢計數(自動產生,別手動改)。放外部檔是因為:寫在 index.html 裡的話,
      更新數字本身就算一次改動,數字會永遠在追自己。 -->
 <script src="audit-info.js"></script>
@@ -1064,6 +1081,29 @@ function toast(msg){
   const t=$("toast"); t.textContent=msg; t.classList.add("show");
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2800);
 }
+/* 存檔一律走 lsSet()(2026-11-02)。
+   瀏覽器的存檔空間滿了(zaker353.github.io 整個網址的 App 共用一份額度)或被擋住時,寫入會丟錯。
+   以前沒接住:那一刻後面的程式全部不執行——一輪做完卡在半路、連「匯出備份」都在第一行就停下來,
+   畫面也不會說。現在寫不進去就跳出存檔失敗警告,其餘程式照常跑:記憶體裡的資料還在,
+   匯出備份與雲端同步都還能把它帶走。
+   唯一刻意不走這裡的是雲端狀態列(ghRecordStatus),它自己接住、失敗也不影響資料。 */
+let saveFailHiddenAt=0, saveFailCount=0;
+function lsSet(key,val){
+  try{ localStorage.setItem(key,val); return true; }
+  catch(e){ saveFailCount++; warnSaveFail(); return false; }
+}
+// 匯入/還原/合併的成功訊息:操作前記下 saveFailCount,中間有存檔失敗就別只說「✅ 完成」,跟紅框打架(2026-11-03 驗收抓到)
+function saveResultMsg(failBefore, okMsg, okIcon){
+  return saveFailCount===failBefore ? (okIcon||"✅")+" "+okMsg
+    : "⚠️ "+okMsg+",但這台裝置存檔失敗(存檔空間滿了),關掉 App 前請先匯出備份";
+}
+function warnSaveFail(){
+  const b=$("saveFailBar"); if(!b || b.classList.contains("show")) return;
+  // 空間滿了之後每一次存檔都會再失敗;按「知道了」之後 10 分鐘內不再跳,免得一直蓋住畫面
+  if(Date.now()-saveFailHiddenAt<10*60*1000) return;
+  b.classList.add("show");
+}
+function hideSaveFail(){ const b=$("saveFailBar"); if(b) b.classList.remove("show"); saveFailHiddenAt=Date.now(); }
 function fmtMs(ms){
   const total=Math.max(0,Math.round(ms/1000));
   const h=Math.floor(total/3600), m=Math.floor(total%3600/60), s=total%60;
@@ -1168,29 +1208,36 @@ function migrateSessionIds(){
   });
   return changed;
 }
+let settingsAtDirty=false;   // 設定的時間戳改了、但還沒成功存進 localStorage(見 saveData 最後)
 function saveData(){
   touchChangedItems(false);   // 有改到的項目自動蓋上新的修改時間
-  localStorage.setItem("pomo_settings", JSON.stringify(settings));
-  localStorage.setItem("pomo_sessions", JSON.stringify(sessions));
-  localStorage.setItem("pomo_tasks", JSON.stringify(tasks));
-  if(activeTask) localStorage.setItem("pomo_activeTask", activeTask);
+  const okSettings=lsSet("pomo_settings", JSON.stringify(settings));
+  lsSet("pomo_sessions", JSON.stringify(sessions));
+  lsSet("pomo_tasks", JSON.stringify(tasks));
+  if(activeTask) lsSet("pomo_activeTask", activeTask);
   else localStorage.removeItem("pomo_activeTask");
-  localStorage.setItem("pomo_favmixes", JSON.stringify(favMixes));
-  localStorage.setItem("pomo_mixvol", JSON.stringify(mixVol));
-  localStorage.setItem("pomo_presets", JSON.stringify(presets));
-  localStorage.setItem("pomo_tombs", JSON.stringify(tombs));
+  lsSet("pomo_favmixes", JSON.stringify(favMixes));
+  const okMixVol=lsSet("pomo_mixvol", JSON.stringify(mixVol));
+  lsSet("pomo_presets", JSON.stringify(presets));
+  lsSet("pomo_tombs", JSON.stringify(tombs));
+  // 要跟 activeTask 一樣寫 else removeItem——否則清成 null 之後舊值還留在 localStorage,
+  // 下次 load() 又把它讀回來,「覆蓋」等於沒覆蓋乾淨(2026-08-09 全面稽核找到)
+  let okFocusMix=true;
+  if(focusMix) okFocusMix=lsSet("pomo_focusmix", JSON.stringify(focusMix));
+  else localStorage.removeItem("pomo_focusmix");
   const snapNow=settingsSnapshot();
   if(snapNow!==settingsSnap){       // 設定類真的改了才動時間戳
     settingsSnap=snapNow;
     // 用 max(現在, 已知最新+1):萬一另一台的時鐘比較快,收到未來的時間戳之後
     // 這台再怎麼改都贏不了,設定就永遠同步不出去(測試抓到的)。
     settingsAt=Math.max(Date.now(), settingsAt+1);
-    localStorage.setItem("pomo_settingsat", String(settingsAt));
+    settingsAtDirty=true;
   }
-  // 要跟 activeTask 一樣寫 else removeItem——否則清成 null 之後舊值還留在 localStorage,
-  // 下次 load() 又把它讀回來,「覆蓋」等於沒覆蓋乾淨(2026-08-09 全面稽核找到)
-  if(focusMix) localStorage.setItem("pomo_focusmix", JSON.stringify(focusMix));
-  else localStorage.removeItem("pomo_focusmix");
+  // 設定、音量、專注組合三樣都存進去了,才存時間戳(2026-11-03 驗收抓到):
+  // 存檔空間快滿時,設定變長一點就寫不進去,長度不變的時間戳卻寫得進去——重新整理後變成
+  // 「舊設定+新時間戳」,別台在中間改的較新設定會被這台蓋掉。記憶體裡的時間戳照樣是新的
+  // (上傳的是記憶體裡的資料,要帶新的);這次沒存成,下一次存檔再補。
+  if(settingsAtDirty && okSettings && okMixVol && okFocusMix && lsSet("pomo_settingsat", String(settingsAt))) settingsAtDirty=false;
   if(typeof ghMarkDirty==="function") ghMarkDirty(); // 資料有變 → 排程自動上傳
 }
 
@@ -1297,7 +1344,7 @@ function activeMixSnapshot(){
 }
 function rememberFocusMix(){
   const cur=activeMixSnapshot();
-  if(cur){ focusMix=cur; localStorage.setItem("pomo_focusmix",JSON.stringify(focusMix)); }
+  if(cur){ focusMix=cur; lsSet("pomo_focusmix",JSON.stringify(focusMix)); }
 }
 function followOnFocusStart(){
   if(!settings.followTimer) return;
@@ -1409,7 +1456,7 @@ function advance(completed, minutes){
   if(mode==="focus"){
     if(completed && minutes>0){
       roundCount++;
-      localStorage.setItem("pomo_rounds", String(roundCount));
+      lsSet("pomo_rounds", String(roundCount));
       // id:讓每一筆紀錄有自己的身分。少了它,同一小時內兩輪同長度的專注會長得
       // 一模一樣,跨裝置合併時分不出「兩筆真紀錄」還是「同一筆重複」。
       const rec={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
@@ -1483,7 +1530,7 @@ function toggleCountUpSetting(cb){
 }
 
 function saveTimerState(){
-  localStorage.setItem("pomo_timer", JSON.stringify({mode,running,endAt,remainMs,cuActive,cuStart,cuAccum,routine,phaseStarted,countUpOverride,phaseMin,pendingCountUp}));
+  lsSet("pomo_timer", JSON.stringify({mode,running,endAt,remainMs,cuActive,cuStart,cuAccum,routine,phaseStarted,countUpOverride,phaseMin,pendingCountUp}));
 }
 function restoreTimerState(){
   let s=null;
@@ -2246,6 +2293,7 @@ function renderStats(){
 }
 
 /* 每日目標進度環 */
+let goalCelebrated=null;
 function renderGoal(todayCount){
   const row=$("goalRow");
   if(!settings.dailyGoal || settings.dailyGoal<1){ row.style.display="none"; return; }
@@ -2253,8 +2301,10 @@ function renderGoal(todayCount){
   $("goalNum").textContent=todayCount+"/"+settings.dailyGoal;
   const pct=Math.min(1,todayCount/settings.dailyGoal);
   $("goalArc").style.strokeDashoffset=String(Math.round((113-113*pct)*10)/10);
-  if(todayCount>=settings.dailyGoal && localStorage.getItem("pomo_goalfired")!==todayStr()){
-    localStorage.setItem("pomo_goalfired",todayStr());
+  // goalCelebrated:「今天已慶祝過」也記在記憶體,存不進去時才不會每畫一次統計就再慶祝一次(2026-11-03 驗收抓到)
+  if(todayCount>=settings.dailyGoal && localStorage.getItem("pomo_goalfired")!==todayStr() && goalCelebrated!==todayStr()){
+    goalCelebrated=todayStr();
+    lsSet("pomo_goalfired",todayStr());
     row.classList.add("hit"); setTimeout(()=>row.classList.remove("hit"),1600);
     toast("🎉🎉 達成今日目標 "+settings.dailyGoal+" 顆番茄,太強了!");
     if(navigator.vibrate) navigator.vibrate([100,50,100,50,300]);
@@ -2390,7 +2440,7 @@ function renderWeekCard(){
 function checkWeekReport(){
   const wk=weekRangeDays(0)[0]; // 用本週一的日期當「這週已顯示」的標記
   if(localStorage.getItem("pomo_weekreport")===wk) return;
-  localStorage.setItem("pomo_weekreport",wk);
+  lsSet("pomo_weekreport",wk);
   const w=weekSummary();
   if(w.lc===0) return;
   $("weekOvBody").innerHTML=weekNoteHtml(w);
@@ -2785,7 +2835,7 @@ function addWater(){
   waterLog[t]=(waterLog[t]||0)+1;
   // 只留最近 60 天,避免越存越肥
   Object.keys(waterLog).forEach(k=>{ if(k<todayStr(-60)) delete waterLog[k]; });
-  localStorage.setItem("pomo_water",JSON.stringify(waterLog));
+  lsSet("pomo_water",JSON.stringify(waterLog));
   if(typeof ghMarkDirty==="function") ghMarkDirty();
   renderWater();
   const goal=settings.health.water.goal||8;
@@ -2821,7 +2871,7 @@ function checkReminders(){
   const today=todayStr();
   if(settings.health.caffeine.on && hhmm>=settings.health.caffeine.time && dailyFlags.caffeine!==today){
     dailyFlags.caffeine=today;
-    localStorage.setItem("pomo_dailyflags",JSON.stringify(dailyFlags));
+    lsSet("pomo_dailyflags",JSON.stringify(dailyFlags));
     fireRem("☕","過了 "+settings.health.caffeine.time+" 囉,今天先別再喝咖啡,晚上才好睡");
     remShown=true;
   }
@@ -2830,7 +2880,7 @@ function checkReminders(){
   if(remShown){ updateSleepLeft(); return; }
   if(settings.health.bed.on && hhmm>=settings.health.bed.time && dailyFlags.bed!==today){
     dailyFlags.bed=today;
-    localStorage.setItem("pomo_dailyflags",JSON.stringify(dailyFlags));
+    lsSet("pomo_dailyflags",JSON.stringify(dailyFlags));
     fireRem("🌙","到就寢提醒時間了,做個收尾,別熬夜囉");
   }
   updateSleepLeft();
@@ -2870,7 +2920,7 @@ function buildBackupData(){
     settingsAt};
 }
 function exportBackup(){
-  localStorage.setItem("pomo_lastexport", todayStr());
+  lsSet("pomo_lastexport", todayStr());
   const data=buildBackupData();
   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
   const a=document.createElement("a");
@@ -2894,8 +2944,9 @@ function importBackup(input){
     const ok=confirm("備份檔內容:\n・專注紀錄 "+data.sessions.length+" 筆\n・任務 "+((data.tasks||[]).length)+" 個\n・匯出日期:"+(data.exportedAt||"未知").slice(0,10)
       +"\n\n匯入會【覆蓋】目前裝置上的紀錄("+sessions.length+" 筆)"+(phaseStarted?"、進行中的這一輪計時也會重設":"")+",確定要匯入嗎?");
     if(!ok) return;
+    const failBefore=saveFailCount;
     applyImport(data);
-    toast("✅ 匯入完成!紀錄已還原");
+    toast(saveResultMsg(failBefore, "匯入完成!紀錄已還原"));
     // 開著雲端自動同步時,單純覆蓋本機沒有意義——下次開 App 會把雲端的又合併回來。
     // 所以直接問清楚,不要讓結果取決於「有沒有撐過 90 秒」(2026-08-09 全面稽核找到)。
     if(loadGh() && ghAutoEnabled()){
@@ -2913,7 +2964,7 @@ function applyImport(data){
   for(const k in DEFAULT_SETTINGS.health)
     settings.health[k]={...DEFAULT_SETTINGS.health[k], ...((s.health&&s.health[k])||{})};
   roundCount=parseInt(data.roundCount,10)||0;
-  localStorage.setItem("pomo_rounds", String(roundCount));
+  lsSet("pomo_rounds", String(roundCount));
   tasks=Array.isArray(data.tasks)?data.tasks:[];
   activeTask=data.activeTask||null;
   favMixes=Array.isArray(data.favMixes)?data.favMixes:[];
@@ -2924,10 +2975,10 @@ function applyImport(data){
   tombs=sanitizeTombs(data.tombs);
   pendingCountUp=null;   // 覆蓋 = 完全變成備份檔的樣子,之前押著的正計時開關作廢(驗收抓到)
   settingsAt=parseInt(data.settingsAt,10)||Date.now();   // 覆蓋 = 完全變成備份檔的樣子
-  localStorage.setItem("pomo_settingsat", String(settingsAt));
+  settingsAtDirty=true;   // 時間戳交給下面的 saveData() 跟設定一起存:設定沒存成就不存它
   settingsSnap=settingsSnapshot();
   waterLog=(data.waterLog&&typeof data.waterLog==="object")?data.waterLog:{};
-  localStorage.setItem("pomo_water",JSON.stringify(waterLog));
+  lsSet("pomo_water",JSON.stringify(waterLog));
   saveData();
   applySettingsToUI(); applyHealthToUI(); applyTheme(); renderTasks(); renderStats();
   renderSoundGrid(); renderFavs(); renderQuote(); renderPresets(); scheduleAllRems();
@@ -2984,7 +3035,7 @@ async function ghUpload(){
     })
   });
   if(!res.ok) throw new Error(ghFriendly(res.status));
-  localStorage.setItem("pomo_lastexport", todayStr()); // 雲端備份也算有備份
+  lsSet("pomo_lastexport", todayStr()); // 雲端備份也算有備份
 }
 async function ghDownload(){
   const cfg=loadGh(); if(!cfg) return null;
@@ -3021,7 +3072,7 @@ function mergeBackup(data){
     if(data.mixVol) for(const k in data.mixVol) if(SOUND_DEFS[k]) mixVol[k]=data.mixVol[k];
     focusMix=data.focusMix||null;
     settingsAt=theirAt;
-    localStorage.setItem("pomo_settingsat", String(settingsAt));
+    settingsAtDirty=true;   // 時間戳交給最後的 saveData() 跟設定一起存:設定沒存成就不存它(否則重新整理後時間戳打平、再也合併不回來)
     settingsSnap=settingsSnapshot();   // 別讓下面的 saveData() 又把時間戳蓋成現在
     applySettingsToUI(); applyHealthToUI(); applyTheme(); renderSoundGrid(); scheduleAllRems();
     if(!phaseStarted){ remainMs=modeMinutes(mode)*60000; phaseMin=modeMinutes(mode); updateDisplay(); }   // 暫停中合併進無關的設定,剩餘時間不可以被重設(驗收抓到)
@@ -3098,20 +3149,25 @@ function mergeBackup(data){
   presets=presets.filter(p=>!isTombed("preset", p.id, p.createdAt));
   if(activeTask && !tasks.some(t=>t.id===activeTask)) activeTask=null;
   if(data.waterLog) for(const d in data.waterLog) waterLog[d]=Math.max(waterLog[d]||0, data.waterLog[d]);
-  localStorage.setItem("pomo_water",JSON.stringify(waterLog));
+  lsSet("pomo_water",JSON.stringify(waterLog));
   roundCount=Math.max(roundCount, parseInt(data.roundCount,10)||0);
-  localStorage.setItem("pomo_rounds",String(roundCount));
+  lsSet("pomo_rounds",String(roundCount));
   saveData();
   renderTasks(); renderStats(); renderFavs(); renderPresets(); renderWater();
 }
 /* ⚡ 全自動同步:開 App 自動「下載並合併」;資料變更後 90 秒自動「上傳」;
    切到別的 App/分頁時也盡力上傳一次。離線或失敗都安靜跳過,手動按鈕照常可用。 */
 const GH_AUTO_KEY="pomo_ghsync_auto", GH_STATUS_KEY="pomo_ghsync_status";
-function ghAutoEnabled(){ return localStorage.getItem(GH_AUTO_KEY)!=="off"; } // 預設開
+// 開關存不進去時(存檔空間滿了),這次開著 App 的期間照使用者按的算——
+// 否則畫面說「已關閉」、其實還在自動上傳(2026-11-03 驗收抓到)。重新整理後回到原本存著的設定。
+let ghAutoMem=null;
+function ghAutoEnabled(){ if(ghAutoMem!==null) return ghAutoMem; return localStorage.getItem(GH_AUTO_KEY)!=="off"; } // 預設開
 function ghSetAuto(on){
-  localStorage.setItem(GH_AUTO_KEY, on?"on":"off");
+  const saved=lsSet(GH_AUTO_KEY, on?"on":"off");
+  ghAutoMem = saved ? null : on;
   ghRender();
-  toast(on?"⚡ 自動同步已開啟":"自動同步已關閉,之後請手動按「上傳備份」");
+  toast((on?"⚡ 自動同步已開啟":"自動同步已關閉,之後請手動按「上傳備份」")
+    + (saved ? "" : "(但存不進去,重新整理後會回到原本的設定)"));
 }
 function ghRecordStatus(s){
   try{ localStorage.setItem(GH_STATUS_KEY, JSON.stringify(s)); }catch(e){}
@@ -3165,11 +3221,11 @@ async function ghAutoDownload(){
   ghAutoBusy=true;
   try{
     const data=await ghDownload();
-    const before=sessions.length;
+    const before=sessions.length, failBefore=saveFailCount;
     mergeBackup(data);
     ghSyncedOk=true;
     ghRecordStatus({at:Date.now(), ok:true, action:"download"});
-    if(sessions.length>before) toast("☁️ 已自動同步:從雲端合併了 "+(sessions.length-before)+" 筆紀錄");
+    if(sessions.length>before) toast(saveResultMsg(failBefore, "已自動同步:從雲端合併了 "+(sessions.length-before)+" 筆紀錄", "☁️"));
   }catch(e){
     // 雲端還沒有備份檔是正常情況(第一次用),不當作錯誤,而且這種情況可以放行上傳
     if(String(e.message).includes("還沒有")) ghSyncedOk=true;
@@ -3196,8 +3252,9 @@ async function ghDoMerge(){
   try{
     const data=await ghDownload();
     if(confirm("雲端備份有 "+data.sessions.length+" 筆專注紀錄、"+((data.tasks||[]).length)+" 個任務。\n將與這台裝置的資料合併。\n專注紀錄兩邊都保留;另一台刪掉的任務／音效組合／情境,這台也會跟著消失。繼續嗎?")){
+      const failBefore=saveFailCount;
       mergeBackup(data); ghSyncedOk=true;
-      ghStatus("✅ 合併完成!目前共 "+sessions.length+" 筆專注紀錄");
+      ghStatus(saveResultMsg(failBefore, "合併完成!目前共 "+sessions.length+" 筆專注紀錄"));
     }else ghStatus("已取消");
   }catch(e){ ghStatus("❌ "+e.message); }
   ghBusy=false;
@@ -3261,9 +3318,10 @@ async function ghRestore(sha, whenText){
     if(confirm("要還原成 "+whenText+" 那個版本嗎?\n\n"
       + "那個版本有 "+data.sessions.length+" 筆專注紀錄、"+((data.tasks||[]).length)+" 個任務。\n"
       + "這台裝置目前的資料("+sessions.length+" 筆)會被完全取代。")){
+      const failBefore=saveFailCount;
       applyImport(data); ghSyncedOk=true;
       $("ghHistory").style.display="none";
-      ghStatus("✅ 已還原成 "+whenText+" 的版本。要讓其他裝置也變成這樣,請按「上傳備份」。");
+      ghStatus(saveResultMsg(failBefore, "已還原成 "+whenText+" 的版本")+"。要讓其他裝置也變成這樣,請按「上傳備份」。");
     }else ghStatus("已取消");
   }catch(e){ ghStatus("❌ "+e.message); }
   ghBusy=false;
@@ -3273,8 +3331,9 @@ async function ghDoOverwrite(){
   try{
     const data=await ghDownload();
     if(confirm("【下載並覆蓋】會刪除這台裝置目前的全部紀錄("+sessions.length+" 筆),完全換成雲端備份("+data.sessions.length+" 筆)。\n只建議「新裝置第一次還原」時用。確定嗎?")){
+      const failBefore=saveFailCount;
       applyImport(data); ghSyncedOk=true;
-      ghStatus("✅ 已還原成雲端備份");
+      ghStatus(saveResultMsg(failBefore, "已還原成雲端備份"));
     }else ghStatus("已取消");
   }catch(e){ ghStatus("❌ "+e.message); }
   ghBusy=false;
@@ -3284,14 +3343,19 @@ function ghSaveConfig(){
   const token=$("ghToken").value.trim();
   if(!rep){ ghStatus("❌ 倉庫格式不對,要像這樣:帳號/倉庫名,例如 zaker353/my-backup"); return; }
   if(!token){ ghStatus("❌ 請貼上金鑰(token)"); return; }
-  localStorage.setItem(GH_KEY, JSON.stringify({owner:rep.owner, repo:rep.repo, token}));
+  // 存不進去就別說「已儲存」:設定沒存起來,之後也不會自動同步
+  if(!lsSet(GH_KEY, JSON.stringify({owner:rep.owner, repo:rep.repo, token}))){
+    ghStatus("❌ 存不進去:這台裝置的瀏覽器存檔空間滿了(或被擋住),雲端設定沒有存起來。");
+    return;
+  }
   ghRender();
   ghStatus("✅ 設定已儲存(只存在這台裝置)。正在跟雲端對帳…");
   // 🔴 一定要先下載對帳再說。少了這一步,新裝置隨手改個設定,90 秒後就會用
   //    幾乎空的資料整份覆蓋掉雲端備份(2026-08-09 全面稽核找到)。
+  const failBefore=saveFailCount;
   ghAutoDownload().then(()=>{
     ghStatus(ghSyncedOk
-      ? "✅ 設定完成,已跟雲端對帳。之後會自動同步,不用再手動按。"
+      ? saveResultMsg(failBefore, "設定完成,已跟雲端對帳。之後會自動同步,不用再手動按")+(saveFailCount===failBefore?"。":"")
       : "⚠️ 設定已存,但還連不上雲端。連得上之前不會自動上傳,以免蓋掉雲端備份。");
     ghRender();
   });
@@ -3554,12 +3618,14 @@ function renderReview(){
 function renderReviewBanner(){
   const b=$("reviewBanner"); if(!b) return;
   const due=reviewStatuses().filter(r=>r.state==="due");
-  if(!due.length || localStorage.getItem("pomo_reviewnag")===todayStr()){ b.style.display="none"; b.innerHTML=""; return; }
+  if(!due.length || localStorage.getItem("pomo_reviewnag")===todayStr() || reviewNagMem===todayStr()){ b.style.display="none"; b.innerHTML=""; return; }
   b.innerHTML='🗓 <b>'+due.length+' 類審查到期:</b>'+due.map(r=>reviewEsc(r.name)).join('、')+'。到設定頁「審查紀錄」複製指令貼給 Claude。'
     +'<div class="btns"><button onclick="dismissReviewBanner()">今天先不看</button><button class="main" onclick="goReviewCard()">去看看</button></div>';
   b.style.display="block";
 }
-function dismissReviewBanner(){ localStorage.setItem("pomo_reviewnag",todayStr()); renderReviewBanner(); }
+// reviewNagMem:「今天先不看」也記在記憶體,存不進去時按了才收得起來(2026-11-03 第二輪驗收抓到)
+let reviewNagMem=null;
+function dismissReviewBanner(){ reviewNagMem=todayStr(); lsSet("pomo_reviewnag",todayStr()); renderReviewBanner(); }
 function goReviewCard(){ showPage("settings"); const c=$("reviewCard"); if(c) c.scrollIntoView({block:"center"}); }
 
 /* ============ 啟動 ============ */
@@ -3587,7 +3653,7 @@ ghAutoDownload(); // 有設定+開啟自動同步時,開 App 自動下載合併
   const a=auditInfo();
   if(a.count < a.threshold) return;
   if(localStorage.getItem("pomo_auditnag")===todayStr()) return;
-  localStorage.setItem("pomo_auditnag",todayStr());
+  lsSet("pomo_auditnag",todayStr());
   setTimeout(()=>fireRem("🔍",
     "已經累積 "+a.count+" 次改動沒做過全面體檢了(門檻 "+a.threshold+")。到設定頁複製體檢指令,貼給 Claude 做一次整體檢查吧。",
     "去看看", ()=>{ showPage("settings"); const c=$("auditCard"); if(c) c.scrollIntoView({block:"center"}); }), 9000);
@@ -3599,7 +3665,7 @@ ghAutoDownload(); // 有設定+開啟自動同步時,開 App 自動下載合併
   const days=last?Math.floor((Date.now()-new Date(last).getTime())/86400000):9999;
   if(days<14) return;
   if(localStorage.getItem("pomo_backupnag")===todayStr()) return;
-  localStorage.setItem("pomo_backupnag",todayStr());
+  lsSet("pomo_backupnag",todayStr());
   setTimeout(()=>fireRem("💾", last
     ? ("已經 "+days+" 天沒備份了,你的專注紀錄很珍貴,到設定頁按「匯出備份」保存一下吧")
     : "紀錄越來越多了!到設定頁按「匯出備份」保存一份,換手機或清資料都不怕"), 6000);

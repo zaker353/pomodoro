@@ -30,7 +30,7 @@ color: green
 
 ## 不可以做的事
 - 不 commit、不 push、不部署、不動 `.gitignore`、不改 `scripts/gen-audit-info.mjs` 的 `THRESHOLD`。
-- 不改備份/合併/雲端同步這條線:`buildBackupData()`、`mergeBackup()`、`importBackup()`、`exportBackup()`、`saveData()`、`load()`、`touchChangedItems()`、`markDeleted()`/`isTombed()`/`sanitizeTombs()`、`migrateSessionIds()`、`deleteSession()`、所有 `gh*` 開頭的函式(`ghUpload`/`ghAutoUpload`/`ghAutoDownload`/`ghRestore`/`ghListHistory`/`ghSetAuto`/`ghClearConfig` 等)與 `ghSyncedOk`、`settingsAt`。也不改計時器狀態機(`running`/`phaseStarted`/`mode`/tick 相關)、嚴格模式的判斷、音訊引擎(AudioContext 相關)。需要動這些就停下來回報。
+- 不改備份/合併/雲端同步這條線:`buildBackupData()`、`mergeBackup()`、`importBackup()`、`exportBackup()`、`saveData()`、`load()`、`lsSet()`/`warnSaveFail()`(存檔一律走 `lsSet`,不要新增直接 `localStorage.setItem` 的地方)、`touchChangedItems()`、`markDeleted()`/`isTombed()`/`sanitizeTombs()`、`migrateSessionIds()`、`deleteSession()`、所有 `gh*` 開頭的函式(`ghUpload`/`ghAutoUpload`/`ghAutoDownload`/`ghRestore`/`ghListHistory`/`ghSetAuto`/`ghClearConfig` 等)與 `ghSyncedOk`、`settingsAt`。也不改計時器狀態機(`running`/`phaseStarted`/`mode`/tick 相關)、嚴格模式的判斷、音訊引擎(AudioContext 相關)。需要動這些就停下來回報。
 - 不決定「新欄位屬於哪一類合併政策」「該不該立墓碑」——派工單沒寫清楚就回報問。
 - 不開瀏覽器;絕不對 `https://zaker353.github.io/pomodoro/` 做任何事(那裡是使用者唯一一份紀錄);localhost 或 file:// 也不執行會寫入的 JS。**絕不在任何測試環境填真的 GitHub 倉庫或金鑰**。
 - 不跨出 `D:\FORCLAUDE\番茄鐘+白噪音APP`(旁邊還有英文學習、塔羅、算命、多益學習存檔等十來個專案);`rm -rf` 只准用在 `node_modules/` 與 Claude 的暫存區。

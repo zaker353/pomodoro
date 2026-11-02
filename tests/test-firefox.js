@@ -367,6 +367,30 @@ function startServer(){
         && !JSON.stringify(parsed).toLowerCase().includes("token"));
     }
 
+    /* ---------- 💾 存檔失敗警告:真的瀏覽器裡寫不進去時,警告真的畫得出來、按得到(2026-11-02) ---------- */
+    // 只在這個測試用的 Firefox 裡把寫入換成會丟錯(全新設定檔、本機來源,碰不到真實資料),測完馬上換回來。
+    // 要換 Storage.prototype.setItem 才有用;直接指定 localStorage.setItem 只會存出一筆叫 setItem 的資料。
+    await js("window.__realSetItem=Storage.prototype.setItem; Storage.prototype.setItem=function(){ throw new DOMException('full','QuotaExceededError'); }; hideSaveFail(); saveFailHiddenAt=0;");
+    await driver.findElement(By.id("nav-tasks")).click();
+    await driver.findElement(By.id("taskInput")).sendKeys("存不進去的任務");
+    await clickSafely(By.xpath("//button[text()='新增']"));
+    await driver.sleep(300);
+    const failBar = await driver.findElement(By.id("saveFailBar"));
+    check("🦊 存檔空間滿了,真的跳出存檔失敗警告", await failBar.isDisplayed());
+    check("🦊 存不進去的任務照樣出現在畫面上(後面的程式沒停下來)",
+      (await driver.findElement(By.id("taskList")).getText()).includes("存不進去的任務"));
+    const fr = await failBar.getRect();
+    const vw = await val("window.innerWidth");
+    // 無頭 Firefox 的視窗最窄只到 500 左右(設 390 實際是 500),所以這裡驗「窄視窗」;真正 375 寬由統籌者另外用手機尺寸看過
+    check("🦊 窄視窗下警告整條都在畫面內、字沒有擠出框",
+      fr.x >= 0 && fr.x + fr.width <= vw && fr.y >= 0 && await val("document.getElementById('saveFailBar').scrollWidth <= document.getElementById('saveFailBar').clientWidth + 1"),
+      "警告 x=" + Math.round(fr.x) + " 寬=" + Math.round(fr.width) + ",視窗寬 " + vw);
+    fs.writeFileSync(path.join(shotDir, "存檔失敗警告-手機.png"), Buffer.from(await driver.takeScreenshot(), "base64"));
+    await failBar.findElement(By.xpath(".//button[text()='知道了']")).click();
+    await driver.sleep(200);
+    check("🦊 按「知道了」警告真的收起來", !(await failBar.isDisplayed()));
+    await js("Storage.prototype.setItem=window.__realSetItem; tasks=tasks.filter(t=>t.name!=='存不進去的任務'); saveData(); renderTasks();");
+
     /* ---------- 順便拍一張任務頁,確認整體沒壞 ---------- */
     await driver.manage().window().setRect({width:1100, height:900});
     await driver.findElement(By.id("nav-tasks")).click();

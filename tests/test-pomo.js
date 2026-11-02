@@ -987,7 +987,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("🗓 有到期時計時頁出現橫幅", d.getElementById("reviewBanner").style.display==="block" && d.getElementById("reviewBanner").textContent.includes("4 類審查到期"));
   E("dismissReviewBanner()");
   check("🗓 「今天先不看」會收起橫幅並記住今天", d.getElementById("reviewBanner").style.display==="none" && w.localStorage.getItem("pomo_reviewnag")===TODAY);
-  E("localStorage.removeItem('pomo_reviewnag'); window.REVIEW_LOG={soonDays:14,categories:[{id:'a',name:'甲',scope:'x',intervalDays:3650,lastReviewedAt:'2026-01-01',note:''}]}; renderReview(); renderReviewBanner();");
+  E("reviewNagMem=null; localStorage.removeItem('pomo_reviewnag'); window.REVIEW_LOG={soonDays:14,categories:[{id:'a',name:'甲',scope:'x',intervalDays:3650,lastReviewedAt:'2026-01-01',note:''}]}; renderReview(); renderReviewBanner();");
   check("🗓 沒有到期就不出橫幅", d.getElementById("reviewBanner").style.display==="none");
   check("🗓 沒有到期時卡片說沒有到期", d.getElementById("reviewCard").textContent.includes("目前沒有到期的審查"));
   const rlP = E("reviewPrompt('a','2026-02-01')");
@@ -1152,6 +1152,169 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   E("switchMode('focus',true);");
   check("🔎 暫停中按同一個模式會提示要按重設", d.getElementById("toast").textContent.includes("重設") && E("remainMs")===22*60000);
   E("settings.work=25; saveData(); resetTimer();");
+
+  // ── 存檔失敗警告(2026-11-02):瀏覽器存檔空間滿了時寫入會丟錯,不可以讓後面的程式停下來
+  // 要改 Storage.prototype.setItem 才換得掉(直接指定 localStorage.setItem 只會存出一筆叫 setItem 的資料)
+  {
+    const realSet = w.Storage.prototype.setItem;
+    const bar = d.getElementById("saveFailBar");
+    E("hideSaveFail(); saveFailHiddenAt=0;");
+    check("💾 (前置)存檔失敗警告平常是收起來的", !bar.classList.contains("show"));
+    w.Storage.prototype.setItem = function(){ throw new w.DOMException("full", "QuotaExceededError"); };
+    // ① 一輪做完時存不進去:這一輪照樣記進記憶體、切到休息,警告跳出來,雲端自動上傳照樣排程
+    let threw = null;
+    try{
+      E("window.__dirty=0; window.__realDirty=ghMarkDirty; ghMarkDirty=function(){ window.__dirty++; }; resetTimer(); settings.countUp=false; settings.autoStartBreak=false; switchMode('focus',false); toggleTimer(); window.__n=sessions.length; finishPhase();");
+    }catch(e){ threw = e; }
+    check("💾 存檔空間滿了,一輪做完不會卡在半路(紀錄進記憶體、切到休息)", !threw && E("sessions.length")===E("window.__n")+1 && E("mode")!=="focus", threw ? String(threw) : "mode="+E("mode"));
+    check("💾 存不進去時跳出存檔失敗警告", bar.classList.contains("show"));
+    check("💾 存不進去時雲端自動上傳照樣排程(記憶體裡的資料還能帶走)", E("window.__dirty")>0, "ghMarkDirty 被叫 "+E("window.__dirty")+" 次");
+    // ② 匯出備份第一行就要寫「上次匯出日期」,以前會停在那裡、檔案根本沒下載 → 現在照樣下載
+    w.__lastDownload = null; threw = null;
+    try{ E("exportBackup();"); }catch(e){ threw = e; }
+    check("💾 存檔空間滿了照樣能匯出備份", !threw && typeof w.__lastDownload==="string" && w.__lastDownload.startsWith("番茄鐘備份_"), threw ? String(threw) : String(w.__lastDownload));
+    // ③ 按「知道了」之後 10 分鐘內不再跳;超過 10 分鐘又失敗就再跳
+    E("hideSaveFail(); saveData();");
+    check("💾 按「知道了」之後馬上又存檔失敗,不會又蓋住畫面", !bar.classList.contains("show"));
+    E("saveFailHiddenAt=Date.now()-11*60*1000; saveData();");
+    check("💾 隔 10 分鐘以上又存檔失敗,警告再跳出來", bar.classList.contains("show"));
+    // ④ 真的按警告上的「匯出備份」(onclick 被截斷過一次,不能只直接呼叫函式)
+    w.__lastDownload = null;
+    bar.querySelector("button.main").click();
+    check("💾 按警告上的「匯出備份」真的會下載", typeof w.__lastDownload==="string" && w.__lastDownload.startsWith("番茄鐘備份_"), String(w.__lastDownload));
+    // ⑤ 雲端設定存不進去時不可以說「已儲存」(用不存在的假帳號,反正也存不進去)
+    d.getElementById("ghRepo").value = "fake-owner/fake-repo-not-exist";
+    d.getElementById("ghToken").value = "fake-token-not-real";
+    E("ghSaveConfig();");
+    const ghMsg = d.getElementById("ghStatus").textContent;
+    check("💾 雲端設定存不進去時講明沒存起來、不說「已儲存」", ghMsg.includes("存不進去") && !ghMsg.includes("已儲存") && !w.localStorage.getItem("pomo_ghsync"), ghMsg.slice(0,40));
+    d.getElementById("ghRepo").value = ""; d.getElementById("ghToken").value = "";
+    w.Storage.prototype.setItem = realSet;
+    E("ghMarkDirty=window.__realDirty; hideSaveFail(); saveFailHiddenAt=0; saveData(); resetTimer();");
+    check("💾 空間恢復後照常存檔、不跳警告", !bar.classList.contains("show") && JSON.parse(w.localStorage.getItem("pomo_sessions")).length===E("sessions.length"));
+  }
+  // 所有存檔都要走 lsSet():只准 lsSet 自己那一行與雲端狀態列(自己有 try/catch、失敗不影響資料)直接寫
+  {
+    const raw = (html.match(/localStorage\.setItem\(/g)||[]).length;
+    const allowed = (html.match(/try\{ localStorage\.setItem\(key,val\); return true; \}/g)||[]).length
+                  + (html.match(/try\{ localStorage\.setItem\(GH_STATUS_KEY/g)||[]).length;
+    check("💾 所有存檔都走 lsSet()(沒有別處直接寫 localStorage)", allowed===2 && raw===allowed, "直接寫 "+raw+" 處、其中允許的 "+allowed+" 處");
+  }
+  // ── 2026-11-03 第一輪驗收抓到的四條。「快滿」= 只有變長(或新的)寫入會失敗,長度不變的照樣寫得進去——
+  //    真實的存檔空間就是這樣,全部失敗反而測不出「一半存進去、一半沒有」
+  {
+    const realSet = w.Storage.prototype.setItem;
+    const growFails = function(k, v){ const old = this.getItem(k); if(old===null || String(v).length > old.length) throw new w.DOMException("full", "QuotaExceededError"); return realSet.call(this, k, v); };
+    const allFail = function(){ throw new w.DOMException("full", "QuotaExceededError"); };
+    const toastText = () => d.getElementById("toast").textContent;
+    // ① 設定變長存不進去、時間戳(長度不變)卻存進去 → 重新整理後「舊設定+新時間戳」會蓋掉別台較新的設定
+    E("hideSaveFail(); saveFailHiddenAt=0; settings.dailyGoal=9; saveData();");
+    const at0 = w.localStorage.getItem("pomo_settingsat");
+    w.Storage.prototype.setItem = growFails;
+    E("settings.dailyGoal=10; saveData();");
+    check("💾 設定存不進去時時間戳也不存(不會變成「舊設定+新時間戳」)",
+      w.localStorage.getItem("pomo_settingsat")===at0 && JSON.parse(w.localStorage.getItem("pomo_settings")).dailyGoal===9 && String(E("settingsAt"))!==at0,
+      "存著 "+w.localStorage.getItem("pomo_settingsat")+" / 原本 "+at0+" / 記憶體 "+E("settingsAt"));
+    w.Storage.prototype.setItem = realSet;
+    E("saveData();");
+    check("💾 空間恢復後下一次存檔補存時間戳,跟設定一致",
+      w.localStorage.getItem("pomo_settingsat")===String(E("settingsAt")) && JSON.parse(w.localStorage.getItem("pomo_settings")).dailyGoal===10);
+    // 合併進較新的雲端設定、設定卻存不進去:時間戳也不可以先存(以前 mergeBackup 自己先寫,重新整理後時間戳打平、再也合併不回來)
+    const at1 = w.localStorage.getItem("pomo_settingsat");
+    w.Storage.prototype.setItem = growFails;
+    E("mergeBackup({app:'pomodoro-whitenoise',version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},settingsAt:settingsAt+1000,settings:Object.assign({},settings,{dailyGoal:100})});");
+    check("💾 合併進來的設定存不進去時,時間戳也不先存",
+      E("settings.dailyGoal")===100 && w.localStorage.getItem("pomo_settingsat")===at1 && JSON.parse(w.localStorage.getItem("pomo_settings")).dailyGoal===10,
+      "存著 "+w.localStorage.getItem("pomo_settingsat")+" / 原本 "+at1);
+    w.Storage.prototype.setItem = realSet;
+    E("saveData();");
+    check("💾 合併後空間恢復,時間戳跟合併進來的設定一起補存",
+      w.localStorage.getItem("pomo_settingsat")===String(E("settingsAt")) && JSON.parse(w.localStorage.getItem("pomo_settings")).dailyGoal===100);
+    // 整份覆蓋(匯入/還原)也一樣:設定存不進去,備份檔的時間戳也不先存
+    const at2 = w.localStorage.getItem("pomo_settingsat");
+    w.Storage.prototype.setItem = growFails;
+    E("applyImport({app:'pomodoro-whitenoise',version:4,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{},settingsAt:settingsAt+5000,settings:Object.assign({},settings,{dailyGoal:1000})});");
+    check("💾 整份覆蓋時設定存不進去,時間戳也不先存",
+      E("settings.dailyGoal")===1000 && w.localStorage.getItem("pomo_settingsat")===at2 && JSON.parse(w.localStorage.getItem("pomo_settings")).dailyGoal===100,
+      "存著 "+w.localStorage.getItem("pomo_settingsat")+" / 原本 "+at2);
+    w.Storage.prototype.setItem = realSet;
+    E("settings.dailyGoal=8; saveData();");
+    // 時間戳也要等音量與專注組合存成(第二輪驗收抓到:只測設定的話,拿掉這兩個條件照樣綠)
+    E("mixVol.rain=5; focusMix=null; saveData();");
+    const at3 = w.localStorage.getItem("pomo_settingsat");
+    w.Storage.prototype.setItem = growFails;
+    E("mixVol.rain=55; saveData();");
+    check("💾 只改音量、音量存不進去時,時間戳也不存", w.localStorage.getItem("pomo_settingsat")===at3 && JSON.parse(w.localStorage.getItem("pomo_mixvol")).rain===5,
+      "存著 "+w.localStorage.getItem("pomo_settingsat")+" / 原本 "+at3);
+    w.Storage.prototype.setItem = realSet;
+    E("saveData();");
+    const at4 = w.localStorage.getItem("pomo_settingsat");
+    w.Storage.prototype.setItem = growFails;
+    E("focusMix={cafe:60}; saveData();");
+    check("💾 第一次設專注組合、存不進去時,時間戳也不存", w.localStorage.getItem("pomo_settingsat")===at4 && w.localStorage.getItem("pomo_focusmix")===null,
+      "存著 "+w.localStorage.getItem("pomo_settingsat")+" / 原本 "+at4);
+    w.Storage.prototype.setItem = realSet;
+    E("focusMix=null; mixVol.rain=50; saveData();");
+    // ② 自動同步開關存不進去:畫面不可以說「已關閉」卻還在自動上傳
+    E("ghSetAuto(true);");
+    w.Storage.prototype.setItem = allFail;
+    d.getElementById("toast").textContent = "";
+    E("ghSetAuto(false);");
+    check("💾 自動同步開關存不進去時,這次開著的期間真的關掉、畫面講明沒存", E("ghAutoEnabled()")===false && toastText().includes("存不進去"), toastText());
+    w.Storage.prototype.setItem = realSet;
+    E("ghSetAuto(true);");
+    check("💾 之後存得進去,開關回到看存著的設定", E("ghAutoMem")===null && w.localStorage.getItem("pomo_ghsync_auto")==="on" && E("ghAutoEnabled()")===true);
+    // ③ 匯入/還原/合併時存不進去:不可以只說「✅ 完成」,跟紅框打架
+    const bk = E("JSON.stringify(buildBackupData())");
+    w.Storage.prototype.setItem = allFail;
+    d.getElementById("toast").textContent = "";
+    w.__inp = {files:[new w.File([bk], "b.json", {type:"application/json"})], value:"x"};
+    E("importBackup(window.__inp);"); await sleep(300);
+    check("💾 匯入時存不進去,訊息講明存檔失敗(不是只有 ✅)", toastText().startsWith("⚠️") && toastText().includes("存檔失敗"), toastText().slice(0,40));
+    w.Storage.prototype.setItem = realSet;
+    d.getElementById("toast").textContent = "";
+    w.__inp = {files:[new w.File([bk], "b.json", {type:"application/json"})], value:"x"};
+    E("importBackup(window.__inp);"); await sleep(300);
+    check("💾 存得進去時匯入照樣說「✅ 匯入完成」", toastText().startsWith("✅ 匯入完成"), toastText().slice(0,40));
+    // 雲端三條路:用不存在的假帳號、關掉自動同步(假的 GitHub 由 makeDom 裡的假 fetch 回應)
+    E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'T'})); ghSetAuto(false); ghRender(); sessions=[{id:'gx1',d:'2026-06-01',m:25,t:9}]; saveData(); ghDoUpload();"); await sleep(200);
+    w.Storage.prototype.setItem = allFail;
+    const ghText = () => d.getElementById("ghStatus").textContent;
+    E("ghDoMerge();"); await sleep(250);
+    check("💾 雲端「下載並合併」存不進去時講明存檔失敗", ghText().startsWith("⚠️ 合併完成") && ghText().includes("存檔失敗"), ghText().slice(0,40));
+    E("ghDoOverwrite();"); await sleep(250);
+    check("💾 雲端「下載並覆蓋」存不進去時講明存檔失敗", ghText().startsWith("⚠️ 已還原成雲端備份") && ghText().includes("存檔失敗"), ghText().slice(0,40));
+    E("ghRestore((window.__ghHistory[0]&&'sha0')||'sha0','某個時間');"); await sleep(250);
+    check("💾 雲端「還原以前的版本」存不進去時講明存檔失敗", ghText().startsWith("⚠️ 已還原成 某個時間 的版本") && ghText().includes("存檔失敗"), ghText().slice(0,40));
+    w.Storage.prototype.setItem = realSet;
+    E("ghRestore('sha0','某個時間');"); await sleep(250);
+    check("💾 存得進去時還原照樣說「✅ 已還原成…」", ghText().startsWith("✅ 已還原成 某個時間 的版本"), ghText().slice(0,40));
+    // 開 App 自動下載合併也一樣(假帳號 + 假 fetch;先關自動同步上傳兩筆到假倉庫,再打開自動同步只為了讓自動下載跑得起來)
+    E("ghSetAuto(false); sessions=[{id:'ad1',d:'2026-06-02',m:25,t:9},{id:'ad2',d:'2026-06-02',m:25,t:10}]; saveData(); ghDoUpload();"); await sleep(200);
+    E("sessions=[]; ghSetAuto(true); clearTimeout(ghUploadTimer); ghDirty=false;");
+    w.Storage.prototype.setItem = allFail;
+    d.getElementById("toast").textContent = "";
+    E("ghAutoDownload();"); await sleep(250);
+    check("💾 開 App 自動合併時存不進去,訊息講明存檔失敗", toastText().startsWith("⚠️ 已自動同步") && toastText().includes("存檔失敗"), toastText().slice(0,40));
+    w.Storage.prototype.setItem = realSet;
+    E("clearTimeout(ghUploadTimer); ghDirty=false;");
+    E("ghHideHistory(); localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); sessions=[]; saveData(); clearTimeout(ghUploadTimer); ghDirty=false; ghRender();");
+    // 審查橫幅「今天先不看」存不進去時,按了也要收得起來(第二輪驗收抓到)
+    E("window.__rl3=window.REVIEW_LOG; reviewNagMem=null; localStorage.removeItem('pomo_reviewnag'); window.REVIEW_LOG={soonDays:14,categories:[{id:'z',name:'測',scope:'x',intervalDays:30,lastReviewedAt:null,note:''}]}; renderReviewBanner();");
+    check("💾 (前置)有到期的審查,橫幅出現", d.getElementById("reviewBanner").style.display==="block");
+    w.Storage.prototype.setItem = allFail;
+    d.querySelector("#reviewBanner button").click();
+    check("💾 存不進去時按「今天先不看」,橫幅照樣收起來", d.getElementById("reviewBanner").style.display==="none");
+    w.Storage.prototype.setItem = realSet;
+    E("window.REVIEW_LOG=window.__rl3; reviewNagMem=null; localStorage.removeItem('pomo_reviewnag'); renderReviewBanner();");
+    // ④「今天已慶祝達標」存不進去:每畫一次統計就再慶祝一次
+    w.Storage.prototype.setItem = allFail;
+    E("goalCelebrated=null; localStorage.removeItem('pomo_goalfired'); settings.dailyGoal=1; sessions=[{id:'g1',d:todayStr(),m:25,t:9}]; window.__gc=0; window.__origToast=toast; toast=function(m){ if(String(m).indexOf('達成今日目標')>=0) window.__gc++; window.__origToast(m); }; renderStats(); renderStats(); renderStats();");
+    check("💾「今天已慶祝」存不進去時,三次畫統計只慶祝一次", E("window.__gc")===1, E("window.__gc")+" 次");
+    E("toast=window.__origToast;");
+    w.Storage.prototype.setItem = realSet;
+    E("settings.dailyGoal=8; sessions=[]; tasks=[]; saveData(); renderStats(); hideSaveFail(); saveFailHiddenAt=0;");
+  }
   console.log(results.join("\n"));
   console.log("\n總結:"+(results.length-failed)+"/"+results.length+" 通過"+(failed?"、"+failed+" 個失敗":""));
   process.exit(failed?1:0);

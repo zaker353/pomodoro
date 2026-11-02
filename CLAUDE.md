@@ -222,6 +222,12 @@
     | 進備份、會合併 | `pomo_settings` `pomo_sessions` `pomo_tasks` `pomo_favmixes` `pomo_mixvol` `pomo_presets` `pomo_focusmix` `pomo_water` `pomo_rounds` `pomo_tombs` `pomo_settingsat` |
     | 進備份、不合併 | `pomo_activeTask` |
     | 本機專屬（絕不進備份） | `pomo_timer`、`pomo_dailyflags`、`pomo_goalfired`、`pomo_backupnag`、`pomo_auditnag`、`pomo_reviewnag`（審查橫幅「今天先不看」）、`pomo_weekreport`、`pomo_lastexport`、`pomo_ghsync`（雲端設定與金鑰）、`pomo_ghsync_auto`、`pomo_ghsync_status` |
+    🔴 **寫入 localStorage 一律用 `lsSet(key, 值)`，不要直接 `localStorage.setItem`**（2026-11-02）：存檔空間滿了（**zaker353.github.io 整個網址的 App 共用一份額度**，英文學習與塔羅的解讀紀錄也在裡面）或被擋住時寫入會丟錯；以前沒接住，一輪做完卡在半路、連「匯出備份」都在第一行就停下來，畫面也不說。`lsSet()` 接住錯誤、跳出紅框「存檔失敗」警告（`#saveFailBar`，按「知道了」後 10 分鐘內不再跳），其餘程式照常跑——記憶體裡的資料還能靠匯出與雲端同步帶走。要看「到底有沒有存進去」就看它回傳的 true/false（例：`ghSaveConfig()` 存不進去就不說「已儲存」）。唯一例外是雲端狀態列 `ghRecordStatus()`（自己有 try/catch、失敗不影響資料）。`tests/test-pomo.js` 的「所有存檔都走 lsSet()」會數直接寫的地方，多一處就紅。
+    ⚠️ **「寫入失敗照常往下跑」會讓存檔變成一半新一半舊**（2026-11-03 驗收抓到）：空間快滿時，變長的寫入失敗、長度不變的照樣寫得進去。所以：
+    - 設定的時間戳 `pomo_settingsat` **只在設定／音量／專注組合三樣都存進去後才存**（`saveData()` 最後看 `settingsAtDirty`，沒存成下次存檔再補）。`mergeBackup()`、`applyImport()` 改了 `settingsAt` 只設 `settingsAtDirty=true`，**不要自己寫 `pomo_settingsat`**——否則重新整理後變成「舊設定＋新時間戳」，別台較新的設定會被蓋掉、或時間戳打平再也合併不回來。
+    - 會一直重複觸發的「今天已做過」旗標要另外記在記憶體（例：達標慶祝的 `goalCelebrated`、審查橫幅「今天先不看」的 `reviewNagMem`），否則存不進去時每畫一次就再來一次。
+    - 會說「✅ 完成／已儲存」的地方要看有沒有存成：單一寫入看 `lsSet()` 的回傳值（`ghSaveConfig`、`ghSetAuto`——開關存不進去時用 `ghAutoMem` 照使用者按的算到重新整理為止），一整段操作用 `saveResultMsg(操作前的 saveFailCount, 訊息)`（匯入、雲端合併／覆蓋／還原、開 App 自動合併、雲端設定完成對帳）。
+    - 已知不修：專注紀錄存不進去、任務的番茄數 `pomos` 卻存進去時，存檔裡兩者會差一顆（記憶體與雲端上傳都對）。要修得做「整份一起存成功才算」，代價大；紅框已經講明這次沒存進去。
 
 29. **「取較新」是使用者決定的**：設定類（`settings`／`mixVol`／`focusMix`）於 2026-08-09 決定，任務／音效組合／自訂情境於 08-10 補上。細節一律看第 28 條的表，這裡不重複。
     （這條原本寫「紀錄／任務／音效組合／情境仍是兩邊相加」，跟第 28 條與程式相反，2026-09-08 改掉。）
@@ -281,8 +287,6 @@
 
 **2026-11-02 決定要做，照這個順序一件一件做**（每件各自上線、各自回報）：
 
-- **`saveData()` 沒有 try/catch**：無痕模式或配額滿會直接丟錯，讓後續程式全部不執行，而且畫面不會告訴我。
-  原本估「一天 8 顆 × 10 年 ≈ 2.4MB、上限 5MB，十年內不會滿」，但 **zaker353.github.io 的 localStorage 是整個網址共用一份額度**（英文學習、塔羅也在同一個網址底下，塔羅的解讀紀錄就存在 localStorage），所以這個估計偏樂觀。要做的是：存不進去時跳出明確警告、叫我先匯出備份。
 - **`ghShowHistory()` / `ghRestore()`（看以前的備份）只有 jsdom 測到**，真 Firefox 那套沒測，
   因為要假造 GitHub 的 commits API。這是資料被蓋掉時的最後一道安全網（它的還原鈕 08-09～09-28 按了沒反應都沒被抓到）。
 - **沒有本月／今年統計**，熱力圖只有 20 週（140 天），2026-07-10 開始用的紀錄約 11-27 起會滑出熱力圖（紀錄還在，只是看不到）。
