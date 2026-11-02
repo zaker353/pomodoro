@@ -524,6 +524,11 @@
         <div class="chart-title">🟥 專注熱力圖(最近 20 週,越紅代表那天專注越久)</div>
         <div class="heat-scroll"><div class="heat-grid" id="heatGrid"></div></div>
         <div class="heat-legend">少 <i></i><i class="heat-1"></i><i class="heat-2"></i><i class="heat-3"></i><i class="heat-4"></i> 多</div>
+        <div class="hour-note" id="heatOlder" style="display:none;margin-top:6px">更早的紀錄沒有不見,只是超出這 20 週——看下面「📆 每月與每年」。</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">📆 每月與每年(全部紀錄)</div>
+        <div id="monthStats"></div>
       </div>
       <div class="chart-card">
         <div class="chart-title">最近 14 天每日專注分鐘數</div>
@@ -703,6 +708,7 @@
           ・完成/復原/刪除,每個任務顯示累積番茄數。<br><br>
           <b>📊 統計頁</b><br>
           ・今日/最近7天/累計/連續天數、20 週熱力圖、14 天長條圖。<br>
+          ・<b>📆 每月與每年</b>:每個月、每一年各做了幾顆、專注多久、幾天有專注;超出熱力圖 20 週的早期紀錄在這裡看得到。<br>
           ・<b>⏱ 時間都花在哪</b>:依任務統計你的時間分配(要在計時頁選任務才記得到)。<br>
           ・<b>📋 最近的專注紀錄</b>:記錯了(手滑按到完成)可以刪掉那一筆。<br>
           ・專注度統計(很專注/普通/分心)。<br>
@@ -2260,6 +2266,10 @@ function renderStats(){
   }
   const sc=heat.parentElement;
   requestAnimationFrame(()=>{ sc.scrollLeft=sc.scrollWidth; });
+  // 有紀錄早於熱力圖第一天,就提醒「沒有不見,看每月與每年」
+  const heatFirst=todayStr(-(totalDays-1));
+  $("heatOlder").style.display = sessions.some(s=>typeof s.d==="string" && s.d<heatFirst) ? "block" : "none";
+  renderMonthStats();
 
   // 最近 14 天長條圖
   const chart=$("chart"), days=$("chartDays");
@@ -2465,6 +2475,50 @@ function deleteSession(id){
   saveData(); renderStats(); renderSessionList(); renderTasks();
   toast("已刪除這筆紀錄");
 }
+// 分鐘數 → 「1 小時 15 分」/「40 分鐘」(任務時間統計、每月與每年共用)
+function fmtHM(m){ return m>=60 ? (Math.floor(m/60)+" 小時 "+(m%60?m%60+" 分":"")) : (m+" 分鐘"); }
+/* 📆 每月與每年:熱力圖只看得到最近 20 週,更早的紀錄靠這裡看(2026-11-03)。
+   純粹讀 sessions 算出來的,沒有新增任何欄位。今年展開,往年收成一行合計、點開看每個月;
+   年裡從第一個有紀錄的月列到最後一個月(今年列到本月),中間沒用的月也列出來,空檔看得到。 */
+function monthStatsData(){
+  const by={};   // "YYYY-MM" → {n:顆數, m:分鐘, days:{日期:1}}
+  sessions.forEach(s=>{
+    if(typeof s.d!=="string" || !/^\d{4}-\d{2}-\d{2}$/.test(s.d)) return;
+    const k=s.d.slice(0,7), o=by[k]||(by[k]={n:0,m:0,days:{}});
+    o.n++; o.m+=(s.m||0); o.days[s.d]=1;
+  });
+  return by;
+}
+function renderMonthStats(){
+  const box=$("monthStats"); if(!box) return;
+  const by=monthStatsData(), keys=Object.keys(by);
+  const thisMonth=todayStr().slice(0,7), thisYear=thisMonth.slice(0,4), curM=parseInt(thisMonth.slice(5),10);
+  let max=1; keys.forEach(k=>{ if(by[k].m>max) max=by[k].m; });
+  const sumText=(n,m,days)=> n ? n+" 顆 · "+fmtHM(m)+" · "+days+" 天" : "沒有紀錄";
+  const monthRow=k=>{
+    const o=by[k]||{n:0,m:0,days:{}}, pct=Math.round(o.m/max*100);
+    return '<div style="margin-bottom:9px">'
+      + '<div style="display:flex;justify-content:space-between;font-size:13px;gap:8px">'
+      + '<span>'+parseInt(k.slice(5),10)+' 月'+(k===thisMonth?' <b style="color:var(--accent)">本月</b>':'')+'</span>'
+      + '<span style="color:var(--dim);white-space:nowrap">'+sumText(o.n,o.m,Object.keys(o.days).length)+'</span></div>'
+      + '<div style="height:6px;background:var(--card2);border-radius:3px;margin-top:3px;overflow:hidden">'
+      + '<div style="height:100%;width:'+pct+'%;background:var(--accent)"></div></div></div>';
+  };
+  const years=[...new Set(keys.map(k=>k.slice(0,4)).concat(thisYear))].sort().reverse();
+  box.innerHTML=years.map(y=>{
+    const ks=keys.filter(k=>k.slice(0,4)===y).sort();
+    const ms=ks.map(k=>parseInt(k.slice(5),10));
+    if(y===thisYear) ms.push(curM);
+    const from=Math.min(...ms), to=Math.max(...ms);
+    let n=0, m=0, days=0; ks.forEach(k=>{ n+=by[k].n; m+=by[k].m; days+=Object.keys(by[k].days).length; });
+    let rows=""; for(let i=to;i>=from;i--) rows+=monthRow(y+"-"+String(i).padStart(2,"0"));
+    const head='<b>'+y+' 年</b>'+(y===thisYear?'(今年)':'')
+      + ' <span style="color:var(--dim);font-size:13px">'+(n ? '共 '+sumText(n,m,days) : '還沒有紀錄')+'</span>';
+    return y<thisYear
+      ? '<details style="margin-top:10px"><summary style="cursor:pointer;margin-bottom:8px">'+head+'</summary>'+rows+'</details>'
+      : '<div style="margin:4px 0 8px">'+head+'</div>'+rows;
+  }).join("");
+}
 /* ⏱ 時間都花在哪:純粹讀既有資料算出來的,沒有新增任何欄位。
    每筆紀錄本來就記著是哪個任務(rec.task),只是以前沒人拿來用。 */
 let taskStatDays=30;
@@ -2491,7 +2545,7 @@ function renderTaskTime(){
     box.innerHTML='<div class="hour-note">這段期間還沒有紀錄。開始計時時在計時頁選一個任務,之後就看得到時間花在哪。</div>';
     return;
   }
-  const hm = m => m>=60 ? (Math.floor(m/60)+" 小時 "+(m%60?m%60+" 分":"")) : (m+" 分鐘");
+  const hm = fmtHM;
   box.innerHTML = rows.slice(0,10).map(r=>{
     const pct=grand? Math.round(r.min/grand*100) : 0;
     return '<div style="margin-bottom:9px">'

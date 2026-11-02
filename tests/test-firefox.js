@@ -409,6 +409,30 @@ function startServer(){
     await driver.sleep(400);
     fs.writeFileSync(path.join(__dirname, "screenshots", "紀錄可刪除.png"),
       Buffer.from(await driver.takeScreenshot(), "base64"));
+
+    /* ---------- 📆 每月與每年:真的畫得出來、往年那行真的點得開、窄視窗不跑版(2026-11-03) ---------- */
+    // 去年 3 月那筆是 30 分鐘,整份資料只有它會出現「1 顆 · 30 分鐘」,拿來判斷往年那行有沒有真的展開
+    const lastYear = new Date().getFullYear() - 1;
+    await js(`
+      sessions=[{id:'y1',d:todayStr(),m:50,t:9},{id:'y2',d:todayStr(-200),m:25,t:10},
+                {id:'y3',d:'${lastYear}-03-15',m:30,t:14},{id:'y4',d:'${lastYear}-01-10',m:25,t:9}];
+      saveData(); renderStats();
+      document.getElementById('monthStats').scrollIntoView({block:'center'});
+    `);
+    await driver.sleep(300);
+    const msClosed = await driver.findElement(By.id("monthStats")).getText();
+    check("🦊 每月與每年真的畫得出來,往年先收著", msClosed.includes("本月") && msClosed.includes(lastYear + " 年")
+      && !msClosed.includes("1 顆 · 30 分鐘"), msClosed.replace(/\n+/g, " ").slice(0,80));
+    check("🦊 熱力圖下真的出現「更早的紀錄沒有不見」", await driver.findElement(By.id("heatOlder")).isDisplayed());
+    await clickSafely(By.css("#monthStats details summary"));
+    await driver.sleep(300);
+    check("🦊 點往年那行真的展開、看得到那年每個月",
+      (await driver.findElement(By.id("monthStats")).getText()).includes("1 顆 · 30 分鐘"));
+    check("🦊 每月與每年在窄視窗沒有擠出框",
+      await val("(function(){var e=document.getElementById('monthStats');return e.scrollWidth<=e.clientWidth+2;})()"));
+    await js("document.querySelector('#monthStats details').scrollIntoView({block:'center'});");
+    await driver.sleep(400);
+    fs.writeFileSync(path.join(shotDir, "每月與每年.png"), Buffer.from(await driver.takeScreenshot(), "base64"));
     await js("tasks=[]; sessions=[]; tombs=emptyTombs(); saveData(); renderStats();");
     await driver.findElement(By.id("nav-settings")).click();
     await driver.sleep(300);

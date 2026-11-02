@@ -690,6 +690,49 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("✨ 切到「全部」就會算進去", d.getElementById("taskTimeList").textContent.includes("小時"));
   E("setTaskStatRange(30); sessions=[]; tasks=[]; saveData();");
 
+  // ── 📆 每月與每年(2026-11-03):熱力圖只看 20 週,更早的紀錄要在這裡看得到 ──
+  // 日期一律從今天推算。「往年」用去年 1～4 月:200 天前怎麼算都不會落在那幾個月,各段才不會互相干擾。
+  const curMonthLabel = parseInt(daysAgoStr(0).slice(5,7),10) + " 月";
+  const lastY = new Date().getFullYear() - 1;
+  const monthTxt = () => d.getElementById("monthStats").textContent;
+  E("sessions=[]; saveData(); renderStats();");
+  check("📆 還沒有紀錄時,本月照樣列出來、今年那行寫「還沒有紀錄」",
+    monthTxt().includes(curMonthLabel+" 本月沒有紀錄") && monthTxt().includes("(今年) 還沒有紀錄"), monthTxt().slice(0,60));
+  // ① 本月:兩輪同一天 → 2 顆、1 小時 15 分、1 天(天數是「有專注的天」,不是輪數)
+  E("sessions=[{id:'ma1',d:todayStr(),m:25,t:9},{id:'ma2',d:todayStr(),m:50,t:10}]; saveData(); renderStats();");
+  check("📆 本月算對:顆數、時間、天數", monthTxt().includes(curMonthLabel+" 本月2 顆 · 1 小時 15 分 · 1 天"), monthTxt().slice(0,80));
+  check("📆 今年合計算對", monthTxt().includes(lastY+1+" 年(今年) 共 2 顆 · 1 小時 15 分 · 1 天"), monthTxt().slice(0,80));
+  check("📆 沒有早期紀錄時,熱力圖下不出現「更早的紀錄」提示", d.getElementById("heatOlder").style.display==="none");
+  // ② 200 天前的紀錄:熱力圖看不到了,這裡要看得到;長條以最多的那個月為滿格
+  E("sessions.push({id:'mb1',d:todayStr(-200),m:40,t:9}); saveData(); renderStats();");
+  check("📆 超出熱力圖的舊紀錄在這裡看得到", monthTxt().includes("1 顆 · 40 分鐘 · 1 天"), monthTxt().slice(0,120));
+  check("📆 有早於熱力圖的紀錄時,熱力圖下提示「沒有不見」", d.getElementById("heatOlder").style.display==="block");
+  const bars = [...d.querySelectorAll('#monthStats div[style*="height:6px"] > div')].map(b=>b.style.width);
+  check("📆 長條以最多的那個月為滿格、其他照比例", bars[0]==="100%" && bars.includes("53%"), JSON.stringify(bars));
+  // ③ 刪掉一筆,每月統計跟著扣
+  E("deleteSession('ma2')");
+  check("📆 刪掉紀錄後每月統計跟著扣掉", monthTxt().includes(curMonthLabel+" 本月1 顆 · 25 分鐘 · 1 天"), monthTxt().slice(0,80));
+  // ④ 往年:收成一行合計、點開才看每個月;中間沒用的月也列出來(空檔看得到),最新的月在上面
+  E("sessions=[{id:'mc0',d:todayStr(),m:25,t:9},{id:'mc1',d:'"+lastY+"-01-15',m:25,t:9},{id:'mc2',d:'"+lastY+"-04-01',m:25,t:9}];"
+    + " saveData(); renderStats();");
+  const oldYear = d.querySelector("#monthStats details");
+  const oldTxt = oldYear ? oldYear.textContent : "";
+  check("📆 往年收成一行、預設不展開", !!oldYear && !oldYear.open
+    && oldYear.querySelector("summary").textContent.includes(lastY+" 年 共 2 顆 · 50 分鐘 · 2 天"), oldTxt.slice(0,60));
+  const oldMonths = oldTxt.match(/\d+ 月/g) || [];
+  check("📆 往年從第一個有紀錄的月列到最後一個,中間沒用的月寫「沒有紀錄」",
+    JSON.stringify(oldMonths)==='["4 月","3 月","2 月","1 月"]' && oldTxt.includes("3 月沒有紀錄"), JSON.stringify(oldMonths));
+  check("📆 今年不收起來", !d.querySelectorAll("#monthStats details")[1]
+    && !(oldYear && oldYear.textContent.includes("本月")));
+  E("sessions=[]; saveData(); renderStats();");
+  // ⑤ 熱力圖邊界:第 140 天(最左邊那格)還看得到,不算「更早」;再早一天才提示
+  E("sessions=[{id:'mh1',d:todayStr(-139),m:25,t:9}]; renderStats();");
+  const heatEdgeIn = d.getElementById("heatOlder").style.display;
+  E("sessions=[{id:'mh2',d:todayStr(-140),m:25,t:9}]; renderStats();");
+  check("📆 「更早的紀錄」提示的邊界剛好是熱力圖最左邊那天",
+    heatEdgeIn==="none" && d.getElementById("heatOlder").style.display==="block", heatEdgeIn);
+  E("sessions=[]; saveData(); renderStats();");
+
   // ── 雲端「以前的備份」 ──
   E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'T'})); ghSetAuto(false); ghRender();");
   check("✨ 雲端卡片有「看以前的備份」按鈕",
