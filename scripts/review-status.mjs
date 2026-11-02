@@ -29,4 +29,4 @@ const pp = pendingProposal(data.categories, today);
 console.log(pp.due
   ? "\n💡 該提出待提的建議了:" + (pp.notYet.length ? "已到保底日期 " + PROPOSE_BY + "(還沒單獨審過:" + pp.notYet.join("、") + ")" : "五類都單獨審查過一次")
     + "——全面體檢要不要改成只看兩類之間的縫+快到期的類別(見 CLAUDE.md 第 39 條)。"
-  : "\n(還沒用各類審查指令單獨審過:" + pp.notYet.join("、") + ";五類到齊或到 " + PROPOSE_BY + " 要提全面體檢的分工,見 CLAUDE.md 第 39 條)");
+  : "\n(還沒單獨審查過:" + pp.notYet.join("、") + ";五類到齊或到 " + PROPOSE_BY + " 要提全面體檢的分工,見 CLAUDE.md 第 39 條)");

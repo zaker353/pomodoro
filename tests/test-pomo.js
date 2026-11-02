@@ -1040,7 +1040,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   const rsOut = require("child_process").execFileSync(process.execPath, [path.join(__dirname, "..", "scripts", "review-status.mjs")], {encoding:"utf8"});
   const ppNow = rlLib.pendingProposal(rl.categories, rlLib.todayYmd());
   check("🗓 npm run review-status 會印待提的建議狀態",
-    ppNow.due ? rsOut.includes("💡 該提出待提的建議了") : rsOut.includes("(還沒用各類審查指令單獨審過:"+ppNow.notYet.join("、")+";"),
+    ppNow.due ? rsOut.includes("💡 該提出待提的建議了") : rsOut.includes("(還沒單獨審查過:"+ppNow.notYet.join("、")+";"),
     rsOut.split("\n").slice(-2).join(" / "));
   // 真實的五類指令:每一類都帶自己的改良方向、否決清單、最多 3 條、檢查指令本身、上次單獨審查
   const rlPromptBad = rl.categories.filter(c=>{
@@ -1051,11 +1051,13 @@ const LAST_WEEK_DAY = daysAgoStr(7);
       && p.includes("【上次單獨審查】"+(c.lastStandaloneAt || "還沒有"))
       && p.includes("lastReviewedAt 與 lastStandaloneAt 都改成做完那天的日期") && p.includes("「找到 N 條(會弄丟資料 M 條)」")
       && p.includes("開頭先寫「建議做」或「建議不做」")
+      && p.includes("線上版(https://zaker353.github.io/pomodoro/)只能看不能寫") && p.includes("絕不在測試環境設定雲端同步、絕不填真的倉庫或金鑰")
       && (c.declinedIdeas.length ? c.declinedIdeas.every(x=>p.includes("\n   - "+x)) : p.includes("(不要重提;情況變了才可以再提,並說明哪裡變了):目前沒有")));
   });
   check("🗓 五類的審查指令都帶改良建議、否決清單、檢查指令本身、單獨審查日", rlPromptBad.length===0, rlPromptBad.map(c=>c.id).join(","));
   check("🗓 只有功能實測的指令交代「代理沒有瀏覽器,點畫面由統籌者做」",
-    rl.categories.every(c=>E("reviewPrompt("+JSON.stringify(c.id)+",'2026-11-03')").includes("pomo-auditor 沒有瀏覽器")===(c.id==="features")));
+    rl.categories.every(c=>{ const p=E("reviewPrompt("+JSON.stringify(c.id)+",'2026-11-03')");
+      return p.includes("pomo-auditor 沒有瀏覽器")===(c.id==="features") && p.includes("「實際聽起來對不對」列進回報請我確認")===(c.id==="features"); }));
   // 全面體檢:改良建議只在收尾段由統籌者自己列,派代理的段落不叫代理列(CLAUDE.md 第 37 條)
   const apAll = E("AUDIT_PROMPT"), apCut = apAll.indexOf("【收尾】");
   check("🗓 體檢指令的改良建議只在收尾段(派代理段不叫代理列)",
@@ -1063,6 +1065,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("🗓 體檢指令的改良建議有上限、方向、否決清單",
     apAll.includes("最多 3 條") && apAll.includes("兩個功能或兩套機制在做同一件事") && apAll.includes("不要重提;情況變了才可以再提")
     && (E("AUDIT_DECLINED_IDEAS.length")===0 ? apAll.includes("並說明哪裡變了):目前沒有") : E("AUDIT_DECLINED_IDEAS.every(x=>AUDIT_PROMPT.includes('\\n  - '+x))")));
+  check("🗓 體檢指令交代「全面稽核」要寫在 commit 標題(計數只看標題)", apAll.includes("commit 的標題(第一行)一定要有「全面稽核」四個字"));
   check("🗓 體檢指令交代涵蓋整類才改日期、不動單獨審查日",
     apAll.includes("該類範圍(scope)裡每一項都看過才算涵蓋") && apAll.includes("lastStandaloneAt 不要動"));
   // 到期判定的四種狀態(用假資料,不依賴今天是幾號)

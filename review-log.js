@@ -2,7 +2,7 @@
 // 來源:review-log.json(要改日期/週期/說明就改那份);產生者:scripts/gen-audit-info.mjs(跑 npm test 時會自動更新)
 // 用途:讓 App 顯示各類審查的上次日期與到期狀態(file:// 開檔不能 fetch JSON,所以包成 .js)。
 window.REVIEW_LOG = {
-  "_說明": "各類審查的「上次做的日期」與「多久該再做一次」。單一來源:App 設定頁的「🗓 審查紀錄」卡、計時頁的到期橫幅、npm run review-status 都讀這裡(App 讀的是 review-log.js,那是跑 npm test 時從這份自動產生的,不要手改)。做完某一類審查就把該類的 lastReviewedAt 改成當天、note 寫一行做了什麼;用該類審查指令單獨整輪做完的,lastStandaloneAt 也改成當天、note 開頭寫「找到 N 條(會弄丟資料 M 條)」(判準見 CLAUDE.md 第 36 條),跟那次的修改一起 commit。全面體檢不記這裡(它有自己的計數 audit-count),但體檢收尾要把實際涵蓋到的類別 lastReviewedAt 一起更新(該類 scope 每一項都看過才算;lastStandaloneAt 不動)。lastReviewedAt 寫 null 代表從沒做過、lastStandaloneAt 寫 null 代表還沒單獨審查過。improveHint 是這一類的改良建議往哪找;declinedIdeas 是我否決過的建議(「YYYY-MM-DD 一句話」),審查指令會列出來叫 Claude 不要重提。",
+  "_說明": "各類審查的「上次做的日期」與「多久該再做一次」。單一來源:App 設定頁的「🗓 審查紀錄」卡、計時頁的到期橫幅、npm run review-status 都讀這裡(App 讀的是 review-log.js,那是跑 npm test 時從這份自動產生的,不要手改)。做完某一類審查就把該類的 lastReviewedAt 改成當天、note 整段換成這次做了什麼;用該類審查指令單獨整輪做完的,lastStandaloneAt 也改成當天、note 開頭寫「找到 N 條(會弄丟資料 M 條)」(判準見 CLAUDE.md 第 36 條),跟那次的修改一起 commit;只做了一部分就兩個日期都不要改,把做了哪些接在 note 尾巴。規則 09-08、功能實測 09-28 兩筆 lastStandaloneAt 是 2026-11-03 加欄位時追認的(當時還沒有「檢查指令本身」那一條,但都是只針對該類整輪做完)。全面體檢不記這裡(它有自己的計數 audit-count),但體檢收尾要把實際涵蓋到的類別 lastReviewedAt 一起更新(該類 scope 每一項都看過才算;lastStandaloneAt 不動)。lastReviewedAt 寫 null 代表從沒做過、lastStandaloneAt 寫 null 代表還沒單獨審查過。improveHint 是這一類的改良建議往哪找;declinedIdeas 是我否決過的建議(「YYYY-MM-DD 一句話」),審查指令會列出來叫 Claude 不要重提。",
   "soonDays": 14,
   "categories": [
     {
