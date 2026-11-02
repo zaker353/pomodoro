@@ -51,9 +51,16 @@ function makeDom(presetStore){
       window.__ghFail = false;
       window.__ghFiles = {};  // 假的 GitHub 倉庫:path -> 檔案內容字串
       window.__ghHistory = [];  // 假的上傳歷史(新的在前)
+      // 假 GitHub 的版本代號(sha)由檔案內容算出來,跟真的一樣「內容變了代號就變」;
+      // 上傳時帶的代號跟雲端現在的不一樣就回 409(真的 GitHub 就是這樣擋「中間被別台改過」;2026-11-03 加)
+      const shaOf = s => { let h=5381; for(let i=0;i<s.length;i++) h=((h*33)^s.charCodeAt(i))>>>0; return "h"+h.toString(16)+"-"+s.length; };
+      window.__ghLog = [];   // 每一次連 GitHub:{m:方法, u:網址, cache:有沒有帶 no-store}
+      window.__ghOffline = false;   // 連不上 GitHub(訊號差、要先登入的公共 Wi-Fi)
       window.fetch = (url, opts) => {
         url = String(url); opts = opts || {};
         if (url.includes("api.github.com")) {
+          window.__ghLog.push({m:opts.method||"GET", u:url, cache:opts.cache||""});
+          if (window.__ghOffline) return Promise.reject(new TypeError("NetworkError when attempting to fetch resource."));
           if (window.__ghFail) return Promise.resolve({ok:false, status:401, json:()=>Promise.resolve({})});
           // 假的「以前的備份」歷史:每次 PUT 會存一個快照
           if (url.includes("/commits?path=")) {
@@ -72,20 +79,28 @@ function makeDom(presetStore){
           if ((opts.method||"GET") === "PUT") {
             const body = JSON.parse(opts.body);
             const path = decodeURIComponent(url.split("/contents/")[1]);
+            if (window.__ghFiles[path] !== undefined && body.sha !== shaOf(window.__ghFiles[path]))
+              return Promise.resolve({ok:false, status:409, json:()=>Promise.resolve({})});
             window.__ghFiles[path] = Buffer.from(body.content, "base64").toString("utf8");
             window.__ghHistory = window.__ghHistory || [];
             window.__ghHistory.unshift({date:new Date().toISOString(), body:window.__ghFiles[path]});
-            return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve({})});
+            const putSha = shaOf(window.__ghFiles[path]);
+            // 測試用:上傳已經送出、回應還沒回來時做點事(模擬「上傳途中」使用者匯入或還原)
+            if (window.__ghOnPut) { const f = window.__ghOnPut; window.__ghOnPut = null; f(); }
+            return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve({content:{sha:putSha}})});
           }
           const tail = url.split("/contents/")[1] || "";
           if (tail === "") {
             const names = Object.keys(window.__ghFiles);
             if (!names.length) return Promise.resolve({ok:false, status:404, json:()=>Promise.resolve([])});
-            return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve(names.map(n=>({name:n, sha:"abc"})))});
+            return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve(names.map(n=>({name:n, sha:shaOf(window.__ghFiles[n])})))});
           }
           const p = decodeURIComponent(tail);
           if (!window.__ghFiles[p]) return Promise.resolve({ok:false, status:404, json:()=>Promise.resolve({})});
-          return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve(JSON.parse(window.__ghFiles[p]))});
+          const got = JSON.parse(window.__ghFiles[p]);
+          // 測試用:下載完之後馬上讓「別台」改雲端(模擬下載到上傳之間被別台搶先上傳)
+          if (window.__ghAfterGet) { const f = window.__ghAfterGet; window.__ghAfterGet = null; f(); }
+          return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve(got)});
         }
         return window.__fetchFail
           ? Promise.reject(new Error("fetch fail"))
@@ -481,11 +496,26 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   // ⚠️ 前面 11.5 結尾跑過 ghClearConfig(),沒有重新設定的話 ghAutoUpload 會因為
   //    「沒有雲端設定」提早 return,這條就變成永遠綠的假測試(第一版就是這樣寫錯的)。
   E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'T'})); ghSetAuto(true);");
+  // 2026-11-03 起:還沒對過帳時,自動上傳會「先對帳(下載合併)再傳」,對不了才不傳——所以這條要在連不上雲端時驗
   E("ghSyncedOk=false; ghDirty=true; ghAutoBusy=false;");
+  w.__ghOffline=true; w.__ghLog=[];
   const beforeGuard=JSON.stringify(w.__ghFiles);
   E("ghAutoUpload()"); await sleep(200);
-  check("🩺 沒跟雲端對過帳就不自動上傳",
-    JSON.stringify(w.__ghFiles)===beforeGuard && E("ghDirty")===true, "ghDirty="+E("ghDirty"));
+  check("🩺 沒跟雲端對過帳、又連不上雲端,就不自動上傳",
+    JSON.stringify(w.__ghFiles)===beforeGuard && E("ghDirty")===true && E("ghSyncedOk")===false && !w.__ghLog.some(c=>c.m==="PUT"),
+    "ghDirty="+E("ghDirty")+" log="+w.__ghLog.map(c=>c.m).join(","));
+  w.__ghOffline=false;
+  // 連得上之後:先把雲端合併進來、再上傳(以前要等下次開 App;雲端多的那筆不可以被蓋掉)
+  w.__ghFiles["pomodoro-backup.json"]=JSON.stringify({app:"pomodoro-whitenoise",version:4,tasks:[],favMixes:[],presets:[],waterLog:{},
+    sessions:[{id:"guardCloud1",d:"2026-06-02",m:25,t:9}]});
+  w.__ghLog=[];
+  E("ghAutoUpload()"); await sleep(300);
+  const guardCloud=JSON.parse(w.__ghFiles["pomodoro-backup.json"]);
+  const getIdx=w.__ghLog.findIndex(c=>c.m==="GET" && c.u.includes("/contents/pomodoro-backup.json")), putIdx=w.__ghLog.findIndex(c=>c.m==="PUT");
+  check("🩺 還沒對帳時連得上:先下載合併,再上傳(雲端那筆沒被蓋掉)",
+    E("ghSyncedOk")===true && E("ghDirty")===false && E("sessions.some(s=>s.id==='guardCloud1')")
+    && guardCloud.sessions.some(s=>s.id==="guardCloud1") && getIdx>=0 && putIdx>getIdx,
+    "順序="+w.__ghLog.map(c=>c.m+(c.u.includes("backup.json")?"檔":"")).join(","));
   // 對過帳之後就該正常上傳(確認防護不是把功能鎖死)
   E("ghSyncedOk=true; ghDirty=true;"); E("ghAutoUpload()"); await sleep(200);
   check("🩺 對過帳之後自動上傳恢復正常", E("ghDirty")===false, "ghDirty="+E("ghDirty"));
@@ -550,8 +580,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("🩺 只離開 10 分鐘會正常續算(保護沒有誤傷)", E("running")===true);
   E("stopTick(); running=false; cuActive=false; settings.countUp=false; localStorage.removeItem('pomo_timer'); switchMode('focus',false);");
   // ⑫ 存完雲端設定要先跟雲端對帳,不可以直接放行自動上傳
-  check("🩺 存雲端設定時會先下載對帳",
-    E("(function(){ return String(ghSaveConfig).includes('ghAutoDownload'); })()")===true);
+  //    (原本只比對原始碼裡有沒有 ghAutoDownload 這個字 = 假防護;2026-11-03 改成真的跑,在下面 11.56)
 
   // 11.545 🛠 2026-08-09 使用者決定要修的四件事
   // ① 嚴格模式:暫停不擋,但「跳過/重設」在這一輪結束前都要藏著
@@ -881,6 +910,239 @@ const LAST_WEEK_DAY = daysAgoStr(7);
     "複製了 "+((w.__copiedText||"").length)+" 字");
   check("複製後有給回饋", d.getElementById("toast").textContent.includes("已複製"));
   E("window.AUDIT_INFO=" + JSON.stringify({count:0, threshold:10, lastAuditDate:null}) + "; renderAudit();");
+
+  // 11.56 🩺 2026-11-03 全面稽核修掉的問題(雲端同步為主),每一條都故意改壞驗過會紅。
+  //       兩台假裝置共用一個假 GitHub(假帳號 o/r、金鑰 FAKE,不會連網路)。
+  {
+    const mk = () => { const ww=makeDom(null).window; return {w:ww, d:ww.document, E:c=>ww.eval(c)}; };
+    const A=mk(), B=mk();
+    A.w.__ghFiles = {}; B.w.__ghFiles = A.w.__ghFiles;
+    const CFG="localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'FAKE'})); ghSetAuto(true);";
+    [A,B].forEach(X=>X.E(CFG+" sessions=[]; tasks=[]; favMixes=[]; presets=[]; tombs=emptyTombs(); saveData(); clearTimeout(ghUploadTimer); ghRender();"));
+    const cloud = () => JSON.parse(A.w.__ghFiles["pomodoro-backup.json"]||'{"sessions":[]}');
+    const ids = arr => Array.from(arr||[]).map(s=>s.id).sort().join(",");
+    const addS = (X,id,day) => X.E("sessions.push({id:'"+id+"',d:'"+day+"',m:25,t:9}); saveData(); ghAutoUpload()");
+    A.E("ghAutoDownload()"); await sleep(150);   // 雲端還沒有檔案 = 對帳完成
+    addS(A,"sA","2026-10-01"); await sleep(200);
+    B.E("ghAutoDownload()"); await sleep(150);
+    addS(B,"sB","2026-10-02"); await sleep(200);
+    check("🩺 (前置)B 合併後上傳,雲端有 A、B 兩筆", ids(cloud().sessions)==="sA,sB", ids(cloud().sessions));
+    // ① A 一直開著、只在開 App 時對過一次帳;它接著上傳時不可以把 B 剛傳的蓋掉
+    addS(A,"sA2","2026-10-03"); await sleep(200);
+    check("🩺 兩台都開著:A 上傳前先合併 B 剛傳的,雲端不會少掉 B 的紀錄",
+      ids(cloud().sessions)==="sA,sA2,sB" && A.E("sessions.some(s=>s.id==='sB')"), "雲端="+ids(cloud().sessions));
+    // ② 下載完到上傳前,雲端又被別台改了 → GitHub 回 409,這次不傳;下次先合併再傳
+    addS(B,"sB2","2026-10-04"); await sleep(200);
+    A.w.__ghAfterGet = () => { const c=cloud(); c.sessions.push({id:"sC",d:"2026-10-05",m:25,t:9}); A.w.__ghFiles["pomodoro-backup.json"]=JSON.stringify(c); };
+    addS(A,"sA3","2026-10-06"); await sleep(200);
+    check("🩺 下載完到上傳前雲端又被改:這次不上傳(409),別台剛傳的那筆還在",
+      cloud().sessions.some(s=>s.id==="sC") && A.E("ghDirty")===true, "雲端="+ids(cloud().sessions)+" ghDirty="+A.E("ghDirty"));
+    A.E("ghAutoUpload()"); await sleep(200);
+    check("🩺 下一次自動上傳先合併再傳,每一台的紀錄都在",
+      ids(cloud().sessions)==="sA,sA2,sA3,sB,sB2,sC" && A.E("ghDirty")===false, ids(cloud().sessions));
+    // ③ 匯入時第二題按「取消(雲端不動)」:之後的自動上傳要先合併,不可以拿匯入的那份蓋掉雲端
+    const beforeImp=cloud().sessions.map(s=>s.id);
+    let answers=[true,false]; A.w.confirm=()=>answers.shift();
+    A.w.__imp=JSON.stringify({app:"pomodoro-whitenoise",version:4,sessions:[{id:"old1",d:"2026-01-01",m:25,t:9}],tasks:[],favMixes:[],presets:[],waterLog:{}});
+    A.E("importBackup({files:[new Blob([window.__imp],{type:'application/json'})], value:''})"); await sleep(300);
+    check("🩺 (前置)匯入後這台只剩匯入的那份、兩題都問了", ids(A.E("sessions"))==="old1" && answers.length===0, ids(A.E("sessions")));
+    A.w.confirm=()=>true;
+    A.E("ghAutoUpload()"); await sleep(250);
+    check("🩺 匯入時按「取消」:之後自動上傳先合併,雲端原有的紀錄一筆都沒少",
+      beforeImp.every(id=>cloud().sessions.some(s=>s.id===id)) && cloud().sessions.some(s=>s.id==="old1"), ids(cloud().sessions));
+    // ④ 匯入 2026-08-09 以前的舊備份(紀錄沒有 id):馬上補 id,別台合併不會翻倍
+    const OLD=JSON.stringify({app:"pomodoro-whitenoise",version:2,settings:{work:25},roundCount:0,
+      sessions:[{d:"2026-07-01",m:25,t:9},{d:"2026-07-01",m:25,t:9},{d:"2026-07-02",m:50,t:14}]});
+    A.w.__old=OLD; B.w.__old=OLD;
+    B.E("sessions=JSON.parse(window.__old).sessions; migrateSessionIds(); saveData();");   // B 早就載入過這批(load() 補了 id)
+    A.E("applyImport(JSON.parse(window.__old))");
+    check("🩺 匯入舊備份馬上補 id(不用等重新整理)", A.E("sessions.every(s=>!!s.id)"), JSON.stringify(A.E("sessions.map(s=>s.id)")));
+    B.w.__fromA=JSON.stringify(A.E("buildBackupData()"));
+    B.E("mergeBackup(JSON.parse(window.__fromA))");
+    check("🩺 別台合併「匯入過舊備份」那台的資料,同一批紀錄不會翻倍", B.E("sessions.length")===3, B.E("sessions.length")+" 筆(應 3)");
+    B.E("mergeBackup(JSON.parse(window.__old))");
+    check("🩺 直接合併沒有 id 的舊備份也不會翻倍", B.E("sessions.length")===3 && new Set(Array.from(B.E("sessions")).map(s=>s.id)).size===3,
+      B.E("sessions.length")+" 筆");
+    // ⑤ 合併/匯入換進來的任務保留對方的修改時間,不會被蓋成「這台剛改過」(否則沒人動過的舊版反而贏過別台真正較新的修改)
+    A.E("tasks=[]; saveData();");
+    A.w.__tk=JSON.stringify({app:"pomodoro-whitenoise",version:4,sessions:[],favMixes:[],presets:[],waterLog:{},
+      tasks:[{id:"tk1",name:"原名",done:false,pomos:0,createdAt:1000,updatedAt:5000}]});
+    A.E("mergeBackup(JSON.parse(window.__tk))");
+    check("🩺 合併進來的任務保留對方的修改時間", A.E("tasks.find(t=>t.id==='tk1').updatedAt")===5000, String(A.E("tasks.find(t=>t.id==='tk1').updatedAt")));
+    // 這台先有一個不一樣的版本(快照記的是它)——否則快照剛好跟檔案一樣,拿掉保護也測不出來(突變測試抓到的假防護)
+    A.E("tasks=[{id:'tk1',name:'本機版',done:false,pomos:0,createdAt:1000}]; saveData(); applyImport(JSON.parse(window.__tk))");
+    check("🩺 匯入的任務保留檔案裡的修改時間", A.E("tasks.find(t=>t.id==='tk1').updatedAt")===5000, String(A.E("tasks.find(t=>t.id==='tk1').updatedAt")));
+    A.E("tasks[0].name='真的改了'; saveData();");
+    check("🩺 之後真的改名才蓋上新的修改時間(自動維護沒被弄壞)", A.E("tasks[0].updatedAt")>5000);
+    // ⑥ 看以前的備份 → 還原:那之後誤刪的救回來,而且別台(還留著墓碑)合併時不會再刪掉
+    A.E("tasks=[{id:'tx',name:'會被誤刪',done:false,pomos:0,createdAt:2000}]; sessions=[{id:'sx',d:'2026-09-01',m:25,t:9}]; tombs=emptyTombs(); saveData();");
+    const oldVer=JSON.stringify(A.E("buildBackupData()"));
+    B.w.__v=oldVer; B.E("tasks=[]; sessions=[]; tombs=emptyTombs(); mergeBackup(JSON.parse(window.__v))");
+    A.E("deleteTask('tx'); deleteSession('sx');");
+    B.w.__v=JSON.stringify(A.E("buildBackupData()")); B.E("mergeBackup(JSON.parse(window.__v))");
+    check("🩺 (前置)刪除同步到 B", !B.E("tasks.some(t=>t.id==='tx')") && !B.E("sessions.some(s=>s.id==='sx')"));
+    A.w.__ghHistory=[{date:new Date().toISOString(), body:oldVer}];
+    A.E("ghRestore('sha0','某個時間')"); await sleep(250);
+    check("🩺 還原後這台救回誤刪的任務與紀錄", A.E("tasks.some(t=>t.id==='tx')") && A.E("sessions.some(s=>s.id==='sx')"),
+      A.d.getElementById("ghStatus").textContent);
+    B.w.__v=JSON.stringify(A.E("buildBackupData()")); B.E("mergeBackup(JSON.parse(window.__v))");
+    check("🩺 救回來的傳到別台,別台的墓碑不會再把它刪掉", B.E("tasks.some(t=>t.id==='tx')") && B.E("sessions.some(s=>s.id==='sx')"));
+    A.w.__v=JSON.stringify(B.E("buildBackupData()")); A.E("mergeBackup(JSON.parse(window.__v))");
+    check("🩺 再合併回來也還在", A.E("tasks.some(t=>t.id==='tx')") && A.E("sessions.some(s=>s.id==='sx')"));
+    // ⑥b 還原「被改壞的」:那個版本的任務名與設定以它為準,自動同步合併後不會又被雲端較新的那版蓋回去(驗收抓到)
+    A.E("tasks=[{id:'te',name:'原名',done:false,pomos:0,createdAt:3000}]; presets=[{id:'pe',icon:'🎓',name:'情境原名',work:45,short:8,rounds:4,mix:{},createdAt:3000}]; settings.work=30; saveData();");
+    const goodVer=JSON.stringify(A.E("buildBackupData()"));
+    A.E("tasks[0].name='被改壞的名字'; presets[0].name='情境壞名'; settings.work=50; saveData();");
+    A.w.__ghFiles["pomodoro-backup.json"]=JSON.stringify(A.E("buildBackupData()"));   // 雲端也是改壞的那版
+    A.w.__ghHistory=[{date:new Date().toISOString(), body:goodVer}];
+    A.E("ghRestore('sha0','好的那時候')"); await sleep(250);
+    A.E("ghSyncedOk=true; ghDirty=true; ghAutoUpload()"); await sleep(250);
+    check("🩺 還原改壞的任務名與設定:自動同步後這台和雲端都是還原的那版",
+      A.E("tasks.find(t=>t.id==='te').name")==="原名" && A.E("settings.work")===30 && A.E("presets.find(p=>p.id==='pe').name")==="情境原名"
+      && cloud().tasks.find(t=>t.id==="te").name==="原名" && cloud().settings.work===30 && cloud().presets.find(p=>p.id==="pe").name==="情境原名",
+      A.E("tasks.find(t=>t.id==='te').name")+"/"+A.E("settings.work")+" 雲端 "+cloud().tasks.find(t=>t.id==="te").name+"/"+cloud().settings.work);
+    A.E("settings.work=25; saveData();");
+    // ⑥c 自動上傳還在半路時匯入(或還原):回來的舊版本代號不可以記下來,否則下一次就不合併、直接蓋掉雲端(驗收抓到)
+    const beforeRace=cloud().sessions.map(s=>s.id);
+    A.E("ghSyncedOk=true; ghDirty=true; ghAutoBusy=false; window.__p=ghAutoUpload(); applyImport({app:'pomodoro-whitenoise',version:4,sessions:[{id:'imp9',d:'2026-01-02',m:25,t:9}],tasks:[],favMixes:[],presets:[],waterLog:{}});");
+    await A.w.__p; await sleep(50);
+    check("🩺 上傳途中被匯入:回來的版本代號不記(下次一律先合併)", A.E("ghKnownSha")===null, String(A.E("ghKnownSha")));
+    A.E("ghDirty=true; ghAutoUpload()"); await sleep(250);
+    check("🩺 上傳途中被匯入:之後雲端原有的紀錄一筆都沒少",
+      beforeRace.every(id=>cloud().sessions.some(s=>s.id===id)) && cloud().sessions.some(s=>s.id==="imp9"), ids(cloud().sessions));
+    // ⑥c-2 手動按「上傳備份」途中匯入(第二題按取消)也一樣:回來的代號不記,之後不會整份蓋掉雲端(第二輪驗收抓到沒測試守)
+    const beforeRace2=cloud().sessions.map(s=>s.id);
+    A.w.__ghOnPut = () => A.E("applyImport({app:'pomodoro-whitenoise',version:4,sessions:[{id:'imp8',d:'2026-01-03',m:25,t:9}],tasks:[],favMixes:[],presets:[],waterLog:{}})");
+    A.E("ghBusy=false; window.__p=ghDoUpload();");
+    await A.w.__p; await sleep(50);
+    A.E("ghSyncedOk=true; ghDirty=true; ghAutoUpload()"); await sleep(250);
+    check("🩺 手動上傳途中被匯入:之後自動上傳先合併,雲端原有的紀錄一筆都沒少",
+      beforeRace2.every(id=>cloud().sessions.some(s=>s.id===id)) && cloud().sessions.some(s=>s.id==="imp8"), ids(cloud().sessions));
+    // ⑥d 還原 2026-08-09 以前(紀錄沒有 id)的版本,也救得回被刪的那筆(還原時先補 id 才認得出來;驗收抓到這行沒測試守)
+    const OLDV=JSON.stringify({app:"pomodoro-whitenoise",version:2,settings:{work:25},roundCount:0,
+      sessions:[{d:"2026-05-01",m:25,t:9},{d:"2026-05-01",m:25,t:9}]});
+    A.w.__ov=OLDV;
+    A.E("sessions=JSON.parse(window.__ov).sessions; migrateSessionIds(); tombs=emptyTombs(); saveData(); deleteSession(sessions[1].id);");
+    const delId=A.E("Object.keys(tombs.session)[0]");
+    B.w.__v=JSON.stringify(A.E("buildBackupData()")); B.E("sessions=[]; tombs=emptyTombs(); mergeBackup(JSON.parse(window.__v))");
+    A.w.__ghHistory=[{date:new Date().toISOString(), body:OLDV}];
+    A.E("ghRestore('sha0','很久以前')"); await sleep(250);
+    B.w.__v=JSON.stringify(A.E("buildBackupData()")); B.E("mergeBackup(JSON.parse(window.__v))");
+    check("🩺 還原沒有 id 的舊版本:被刪的那筆救回來,別台也收得到",
+      A.E("sessions.some(s=>s.id==="+JSON.stringify(delId)+")") && B.E("sessions.some(s=>s.id==="+JSON.stringify(delId)+")"),
+      "刪掉的是 "+delId+";B="+ids(B.E("sessions")));
+    // ⑦ 存檔失敗紅框開著時,提醒先排隊(不在紅框底下跳出來、20 秒後悄悄消失);紅框收起來就接著跳
+    A.E("hideRem(); remQueue=[]; document.getElementById('saveFailBar').classList.add('show'); fireRem('💧','該喝水了','我喝了',null);");
+    check("🩺 紅框開著時提醒先排隊", !A.d.getElementById("remBanner").classList.contains("show") && A.E("remQueue.length")===1);
+    A.E("hideSaveFail()");
+    check("🩺 紅框收起來,排隊的提醒接著跳出來", A.d.getElementById("remBanner").classList.contains("show"));
+    A.E("hideRem(); remQueue=[]; saveFailHiddenAt=0;");
+    // ⑧ 合併進新紀錄,統計頁要跟著重畫(突變把重畫拿掉以前不會紅)
+    A.E("showPage('stats'); sessions=[]; tombs=emptyTombs(); saveData(); renderStats();");
+    A.w.__m3=JSON.stringify({app:"pomodoro-whitenoise",version:4,tasks:[],favMixes:[],presets:[],waterLog:{},
+      sessions:[{id:"st1",d:daysAgoStr(0),m:25,t:9},{id:"st2",d:daysAgoStr(0),m:25,t:10}]});
+    A.E("mergeBackup(JSON.parse(window.__m3))");
+    check("🩺 合併後統計頁跟著重畫", A.d.getElementById("statTotal").textContent.trim().startsWith("2"), A.d.getElementById("statTotal").textContent);
+    // ⑨ 開 App 時沒網路:狀態列要講明還沒對帳(以前什麼都不說)
+    Object.defineProperty(A.w.navigator, "onLine", {get:()=>false, configurable:true});
+    A.E("ghSyncedOk=false; ghAutoDownload()");
+    check("🩺 開 App 時沒網路,狀態列講明還沒跟雲端對帳",
+      String(A.w.localStorage.getItem("pomo_ghsync_status")).includes("沒有網路") && A.E("ghSyncedOk")===false);
+    Object.defineProperty(A.w.navigator, "onLine", {get:()=>true, configurable:true});
+    // ⑩ 換倉庫(✏️ 修改設定):跟舊倉庫對過的帳不算數;對帳結果的訊息要真的留在畫面上
+    A.E("ghSyncedOk=true;");
+    A.w.__ghOffline=true; A.w.__ghLog=[];
+    A.E("ghRenderEdit(); document.getElementById('ghRepo').value='o/r2'; document.getElementById('ghToken').value='T2'; ghSaveConfig();"); await sleep(200);
+    check("🩺 換倉庫後對帳失敗:不算對過帳", A.E("ghSyncedOk")===false);
+    check("🩺 對帳失敗的警告真的留在畫面上(沒被重畫清掉)", A.d.getElementById("ghStatus").textContent.includes("還連不上雲端"),
+      "ghStatus=「"+A.d.getElementById("ghStatus").textContent+"」");
+    A.E("ghDirty=true; ghAutoUpload()"); await sleep(200);
+    check("🩺 換倉庫沒對上帳:自動上傳不會 PUT", !A.w.__ghLog.some(c=>c.m==="PUT"), A.w.__ghLog.map(c=>c.m).join(","));
+    A.w.__ghOffline=false;
+    A.E("ghRenderEdit()");
+    check("🩺 按「✏️ 修改設定」還沒儲存時,原本的設定還在(雲端同步不會悄悄停掉)", A.E("!!loadGh() && loadGh().repo==='r2'"));
+    A.E("ghCancelEdit()");
+    check("🩺 按取消回到原本的設定畫面", !!A.d.getElementById("ghAutoCb") && !A.d.getElementById("ghRepo"));
+    A.w.__ghLog=[];
+    A.E("ghRenderEdit(); document.getElementById('ghRepo').value='o/r'; document.getElementById('ghToken').value='FAKE'; ghSaveConfig();"); await sleep(250);
+    check("🩺 對帳成功的訊息真的留在畫面上", A.d.getElementById("ghStatus").textContent.includes("設定完成,已跟雲端對帳"),
+      "ghStatus=「"+A.d.getElementById("ghStatus").textContent+"」");
+    // 對帳時存檔失敗:訊息不可以只說 ✅(突變把它改回只說 ✅ 以前不會紅)
+    const realSet=A.w.Storage.prototype.setItem;
+    A.w.Storage.prototype.setItem=function(k,v){ if(k==="pomo_sessions") throw new A.w.DOMException("full","QuotaExceededError"); return realSet.call(this,k,v); };
+    A.E("sessions=[]; ghRenderEdit(); document.getElementById('ghRepo').value='o/r'; document.getElementById('ghToken').value='FAKE'; ghSaveConfig();"); await sleep(250);
+    A.w.Storage.prototype.setItem=realSet;
+    check("🩺 設定雲端時合併存不進去,訊息講明存檔失敗", A.d.getElementById("ghStatus").textContent.startsWith("⚠️ 設定完成"),
+      "ghStatus=「"+A.d.getElementById("ghStatus").textContent+"」");
+    A.E("hideSaveFail();");
+    // ⑪ 讀雲端一律 no-store(不拿瀏覽器暫存一分鐘內的舊回應)
+    A.E("ghShowHistory()"); await sleep(200);
+    A.E("ghDirty=true; ghAutoUpload()"); await sleep(200);   // 上傳前會讀版本代號
+    const gets=A.w.__ghLog.filter(c=>c.m==="GET" && !c.u.includes("?ref="));
+    check("🩺 讀雲端(版本代號/備份檔/以前的備份清單)都帶 no-store",
+      gets.some(c=>c.u.endsWith("/contents/")) && gets.some(c=>c.u.includes("/contents/pomodoro-backup.json")) && gets.some(c=>c.u.includes("/commits?"))
+      && gets.every(c=>c.cache==="no-store"), gets.map(c=>c.cache||"(無)").join(","));
+    [A,B].forEach(X=>X.E("clearTimeout(ghUploadTimer); localStorage.removeItem('pomo_ghsync');"));
+  }
+
+  // 11.57 🌐 sw.js 實際行為(2026-11-03 全面稽核加):用 node 的 vm 跑真的 sw.js,假的 self/caches/fetch。
+  //       以前完全沒有測試守著「只刪 pomo- 開頭的快取」(07-15 那次把英文學習與塔羅的離線清光),
+  //       這輪又發現它把 GitHub 的回應也存進快取、連不上時拿舊的備份當新的。
+  {
+    const vm = require("vm");
+    const swSrc = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
+    const runSw = (startCaches, net) => {
+      const store = new Map(startCaches.map(n=>[n,new Map()]));
+      const on = {};
+      const caches = {
+        open: async n => { if(!store.has(n)) store.set(n,new Map()); const m=store.get(n);
+          return { addAll: async fs => fs.forEach(f=>m.set(f,{ok:true,status:200,body:"cached:"+f})), put: async (q,r)=>{ m.set(q.url||q, r); } }; },
+        keys: async () => [...store.keys()],
+        delete: async n => store.delete(n),
+        match: async q => { for(const m of store.values()) if(m.has(q.url||q)) return m.get(q.url||q); }
+      };
+      const self = { addEventListener:(t,f)=>{ on[t]=f; }, skipWaiting(){}, clients:{claim:async()=>{}}, location:{origin:"https://zaker353.github.io"} };
+      vm.runInNewContext(swSrc, { self, caches, fetch:net, URL, Promise, console });
+      const fetchEv = async (url, method) => { let p=null; on.fetch({ request:{url, method:method||"GET"}, respondWith(x){ p=x; } }); return p ? await p : "沒接手"; };
+      return { on, store, caches, fetchEv };
+    };
+    const CUR = (swSrc.match(/CACHE_PREFIX \+ "(v\d+)"/)||[])[1];
+    const S1 = runSw(["pomo-v1","langlearn-v9","tarot-v3","pomo-"+CUR], async()=>({ok:true,status:200,clone(){return this;}}));
+    let waited=null; S1.on.activate({ waitUntil(p){ waited=p; } }); await waited;
+    const keysAfter = [...S1.store.keys()].sort().join(",");
+    check("🌐 sw.js 換版時只刪自己(pomo-)的舊快取,英文學習與塔羅的不動",
+      keysAfter===["langlearn-v9","pomo-"+CUR,"tarot-v3"].sort().join(","), keysAfter);
+    const ORIGIN="https://zaker353.github.io/pomodoro/";
+    let netOk=true, netStatus=200;
+    const S2 = runSw([], async()=>{ if(!netOk) throw new TypeError("offline"); return {ok:netStatus<400,status:netStatus,clone(){return this;}}; });
+    await (async()=>{ let p; S2.on.install({waitUntil(x){p=x;}}); await p; })();
+    const r1 = await S2.fetchEv(ORIGIN+"index.html");
+    check("🌐 自己網站的 GET:有網路就拿新的", r1 && r1.status===200);
+    netStatus=404; await S2.fetchEv(ORIGIN+"index.html"); netStatus=200;
+    netOk=false;
+    const r2 = await S2.fetchEv(ORIGIN+"index.html");
+    check("🌐 錯誤回應(404)不會蓋掉快取裡好好的那份,斷線時拿到的還是好的", r2 && r2.status===200, JSON.stringify(r2));
+    const r3 = await S2.fetchEv("https://api.github.com/repos/o/r/contents/pomodoro-backup.json");
+    check("🌐 跨網域(GitHub)的請求不接手、也不存進快取(連不上就是連不上,不拿舊備份當新的)",
+      r3==="沒接手" && ![...S2.store.values()].some(m=>[...m.keys()].some(k=>String(k).includes("api.github.com"))), String(r3));
+    netOk=true;
+    check("🌐 不是 GET(上傳)的請求不接手", (await S2.fetchEv(ORIGIN+"x","PUT"))==="沒接手");
+  }
+
+  // 11.58 🔢 體檢計數腳本讀「還沒 commit 的改動」(2026-11-03 全面稽核:以前第一個檔名會被切掉一個字,計數多算 1)
+  {
+    const ga = await import(pathToFileURL(path.join(__dirname, "..", "scripts", "gen-audit-info.mjs")).href);
+    const files = ga.dirtyFiles(" M review-log.json\n M audit-info.js\n?? 新檔.md\nR  a.js -> b.js\n");
+    check("🔢 計數腳本讀得出完整檔名(第一個字沒被切掉)", files.join("|")==="review-log.json|audit-info.js|新檔.md|b.js", files.join("|"));
+    check("🔢 只改了審查紀錄與計數檔,不算實質改動", ga.dirtyFiles(" M review-log.json\n M audit-info.js\n").every(ga.isTrivial));
+    check("🔢 改了 index.html 就算實質改動", !ga.dirtyFiles(" M index.html\n").every(ga.isTrivial));
+  }
+  // 11.59 😴 關掉午睡畫面後,提示要回到畫面上原本那句(08-09 只改了 HTML,關掉時還原的是另一句舊的;2026-11-03 全面稽核)
+  {
+    const napOrig = (html.match(/id="napHint">([\s\S]*?)<\/div>/)||[])[1];
+    E("$('napHint').textContent='睡吧'; closeNap();");
+    check("😴 關掉午睡後提示回到原本那句", !!napOrig && d.getElementById("napHint").innerHTML===napOrig, d.getElementById("napHint").innerHTML.slice(0,40));
+  }
 
   // 11.6 🪦 刪除墓碑:刪掉的東西不可以被舊備份合併回來復活
   // (這一節每一項都刻意把墓碑機制拿掉驗證過會失敗,不是假防護)

@@ -23,17 +23,19 @@
 import { execSync } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { generateReviewJs } from "./review-log.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "audit-info.js");
 const THRESHOLD = 10;   // 門檻:累積幾次就提醒該做全面體檢(要改也順手改 CLAUDE.md 第七節)
 
-const git = (cmd) => execSync("git " + cmd, {cwd: ROOT, encoding: "utf8"}).trim();
+// core.quotepath=false:中文檔名照原樣印,不要變成 "\351\226\213..." 加引號(否則中文檔名的 .md 認不出來)
+const gitRaw = (cmd) => execSync("git -c core.quotepath=false " + cmd, {cwd: ROOT, encoding: "utf8"});
+const git = (cmd) => gitRaw(cmd).trim();
 
 // 不算「實質改動」的檔案
-const isTrivial = (f) => f.endsWith(".md")
+export const isTrivial = (f) => f.endsWith(".md")
   || f === "audit-info.js"
   || f === "scripts/gen-audit-info.mjs"
   || f === ".gitignore"
@@ -41,6 +43,20 @@ const isTrivial = (f) => f.endsWith(".md")
   || f === "review-log.json"
   || f === "review-log.js";
 
+/* `git status --porcelain` 的輸出 → 檔名清單。
+   ⚠️ 不可以先把整段 .trim():每行開頭的空格是狀態欄位的一部分(" M 檔名"),整段 trim 會吃掉第一行的空格,
+   接著 slice(3) 就把第一個檔名的第一個字切掉(" M review-log.json" → "eview-log.json"),
+   只改了審查紀錄或計數檔也被當成實質改動,計數多 1(2026-11-03 驗收抓到,全面稽核修)。 */
+export function dirtyFiles(porcelain){
+  return String(porcelain).split(/\r?\n/).filter(l => l.trim())
+    .map(l => l.slice(3).trimEnd().replace(/^"|"$/g, ""))
+    .map(f => f.includes(" -> ") ? f.split(" -> ")[1] : f);
+}
+
+// 被測試 import 時只拿上面兩個函式,不要真的去算、去寫檔
+const isMain = !!process.argv[1] && resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase();
+if(isMain) main();
+function main(){
 // 上次全面體檢的 commit:只看標題列(%s),不看內文
 let lastAudit = "";
 try{
@@ -63,11 +79,7 @@ for(const h of hashes){
 
 // 工作區還沒 commit 的實質改動(含新檔)算一次
 let dirty = [];
-try{
-  dirty = git("status --porcelain --untracked-files=all").split(/\r?\n/).filter(Boolean)
-    .map(l => l.slice(3).trim().replace(/^"|"$/g, ""))
-    .map(f => f.includes(" -> ") ? f.split(" -> ")[1] : f);
-}catch(e){}
+try{ dirty = dirtyFiles(gitRaw("status --porcelain --untracked-files=all")); }catch(e){}
 if(dirty.some(f => !isTrivial(f))) count++;
 
 let lastAuditDate = null;
@@ -95,3 +107,4 @@ if(before !== body){
 }
 
 if(generateReviewJs(ROOT)) console.log("🗓 review-log.js 已從 review-log.json 重產");
+}

@@ -32,20 +32,20 @@ window.REVIEW_LOG = {
       "name": "資料與同步",
       "scope": "buildBackupData/mergeBackup/importBackup、墓碑、ghSyncedOk、舊備份(v1~v3)相容、localStorage 每個 key 的合併類別(CLAUDE.md 第 28 條表);拿具體情境跑:A 機刪 B 機合併不復活、同一小時兩筆相同紀錄不被吃掉、新裝置沒對帳不上傳、時鐘較快那台的設定仍同步得出去",
       "intervalDays": 90,
-      "lastReviewedAt": "2026-08-09",
+      "lastReviewedAt": "2026-11-03",
       "lastStandaloneAt": null,
-      "note": "全面稽核:修 8 個會弄丟/弄髒紀錄的問題(紀錄帶 id、ghSyncedOk、墓碑)+ 任務/情境/組合改取較新;09-08 只補了政策表與守門測試,沒重驗合併路徑",
+      "note": "全面稽核(2026-11-03,只改 lastReviewedAt):範圍整輪看過,兩三台假裝置實跑「刪了不復活/同一小時兩筆/沒對帳不上傳/時鐘較快」四個情境都成立;修 9 條:兩台都開著時上傳蓋掉另一台剛傳的(改成上傳前比對雲端版本代號、不同就先合併、帶代號上傳被搶先就 409)、匯入按取消照樣蓋雲端、換倉庫沿用舊對帳、匯入舊備份沒補 id 別台合併翻倍、合併/匯入把對方的修改時間蓋成現在、還原救不回誤刪(別台墓碑)、sw.js 與瀏覽器暫存讓舊的雲端回應冒充新的(真 Firefox 重現)、離線開 App 一聲不吭、存雲端設定的結果訊息被清掉;已知不修:空間滿時墓碑存不進去、刪掉的會復活(記入 CLAUDE.md 第 28 條)",
       "improveHint": "只收「更安全」的建議:哪條路徑還能多一道防線、哪個情境還沒有自動測試、備份與還原能不能更不容易出錯;不要為了好寫或好看提議重構備份、合併或雲端同步",
       "declinedIdeas": []
     },
     {
       "id": "docs",
       "name": "說明與文案",
-      "scope": "設定頁「使用說明」「實用建議」共 8 篇與統計頁 1 篇、畫面上的提示/空狀態/按鈕文字、README 功能行與音效出處表、AUDIT_PROMPT 描述的功能:還符合現在的行為嗎?有沒有繁簡異體字",
+      "scope": "設定頁「使用說明」「實用建議」與雲端備份教學共 9 篇、統計頁 1 篇、畫面上的提示/空狀態/按鈕文字、README 功能行與音效出處表、AUDIT_PROMPT 描述的功能:還符合現在的行為嗎?有沒有繁簡異體字",
       "intervalDays": 90,
-      "lastReviewedAt": "2026-08-09",
+      "lastReviewedAt": "2026-11-03",
       "lastStandaloneAt": null,
-      "note": "全面稽核:11 處過時說明 + README 補功能清單;09-08 只改了體檢指令兩句",
+      "note": "全面稽核(2026-11-03,只改 lastReviewedAt):10 篇摺疊說明逐篇對過、畫面提示/確認框/橫幅/README 出處表/AUDIT_PROMPT 都比對,繁簡異體字腳本掃 0 處;修:說明篇數其實是設定頁 9+統計頁 1(四處寫 8)、刪除專注紀錄會同步有四處沒寫、雲端說明與還原訊息講錯、午睡提示關掉後變回舊句、功能總覽漏改名/三個開關/自動同步/看以前的備份/審查紀錄且多一串全形空白、刪紀錄不扣任務🍅、正計時一輪上限 4 小時沒提、README 功能行補 7 項",
       "improveHint": "說明好不好找、哪個按鈕旁邊缺一句話就容易用錯、說明裡的用詞跟畫面上的按鈕名稱不一致、哪篇說明太長不會有人看完",
       "declinedIdeas": []
     },
@@ -54,9 +54,9 @@ window.REVIEW_LOG = {
       "name": "離線與部署",
       "scope": "sw.js 的 FILES 與版本號、只刪 pomo- 前綴、manifest 與圖示、用 開啟本機伺服器.bat 斷網後真的開得起來、線上版 sw.js 版本與本機一致、三個測試工具(jsdom/selenium/geckodriver)有沒有新版、五個 .bat 都能跑",
       "intervalDays": 120,
-      "lastReviewedAt": "2026-07-15",
+      "lastReviewedAt": "2026-11-03",
       "lastStandaloneAt": null,
-      "note": "稽核抓到清快取會把同網域其他 App 的快取清光,改成只刪 pomo- 前綴;之後 FILES 有維護(09-08 加音效四方一致測試),但沒整輪核對 manifest/斷網實測/測試套件版本",
+      "note": "全面稽核(2026-11-03,只改 lastReviewedAt):FILES 31 項對磁碟與 index.html 引用、圖示尺寸與 manifest、線上 sw.js/index.html/audit-info.js/review-log.js 與本機一致(curl);真 Firefox 用 serve.mjs 實測:清快取只刪 pomo-(英文學習/塔羅的留著)、伺服器關掉後首頁/index.html/音檔/manifest/圖示都從快取拿得到;五個 .bat 都實際跑過;npm outdated:jsdom 30、geckodriver 8 是大版、selenium 4.51 小版,npm audit 2 個高風險都在 jsdom 的相依(只用在測試、不連外)→不升;修:sw.js 連 GitHub 的回應也快取、錯誤回應也存(改成只管自己網站的 GET、只存成功的),並補 sw.js 行為測試(以前沒有任何測試守「只刪 pomo-」)",
       "improveHint": "部署與離線流程有沒有能更自動、更不容易漏步驟的地方(例:sw.js 的版本號靠手動 +1);測試工具升級只在有具體好處(修 bug、安全性)時才提",
       "declinedIdeas": []
     }

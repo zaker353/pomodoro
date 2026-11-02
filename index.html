@@ -558,7 +558,7 @@
         <summary>📋 最近的專注紀錄(記錯了可以刪)</summary>
         <div class="help-body">
           <div class="hour-note" style="margin-bottom:8px">
-            按 ✕ 可以刪掉記錯的那一筆(例如手滑按到「完成」)。刪掉後統計、熱力圖、連續天數都會跟著扣掉,<b>而且沒辦法復原</b>。
+            按 ✕ 可以刪掉記錯的那一筆(例如手滑按到「完成」)。刪掉後統計、熱力圖、連續天數都會跟著扣掉(任務上累積的 🍅 數不會扣),<b>而且沒辦法直接復原</b>(有開雲端備份的話,可以從設定頁「🕘 看以前的備份」救回)。
           </div>
           <div id="sessionList"></div>
         </div>
@@ -705,7 +705,7 @@
           <b>✅ 任務頁</b><br>
           ・新增任務時可填「預估幾顆番茄」,做完對照實際,練習估算能力。<br>
           ・☀️ 排進今日待辦:計時頁就只顯示今天要做的。<br>
-          ・完成/復原/刪除,每個任務顯示累積番茄數。<br><br>
+          ・完成/復原/刪除,按 ✏️ 改名字,每個任務顯示累積番茄數。<br><br>
           <b>📊 統計頁</b><br>
           ・今日/最近7天/累計/連續天數、20 週熱力圖、14 天長條圖。<br>
           ・<b>📆 每月與每年</b>:每個月、每一年各做了幾顆、專注多久、幾天有專注;超出熱力圖 20 週的早期紀錄在這裡看得到。<br>
@@ -723,8 +723,8 @@
           ・伸展三套:頸肩手腕、眼部放鬆、下背腰部。<br>
           ・午睡充電(溫柔漸強鬧鈴)。<br><br>
           <b>⚙️ 設定頁</b><br>
-          ・時長、每日目標、鈴聲重複次數、嚴格模式、白噪音跟著計時、自動開始、螢幕常亮、淺色主題、系統通知。<br>
-          ・備份:匯出/匯入檔案,或 ☁️ GitHub 雲端備份(上傳/下載合併/下載覆蓋),手機電腦互相同步。<br>　　　　　　　　　　・🔍 全面體檢:改動累積夠多時提醒你,一鍵複製體檢指令。<br><br>
+          ・時長、每日目標、鈴聲重複次數、嚴格模式、白噪音跟著計時、自動開始、螢幕常亮、淺色主題、系統通知、休息微運動、記錄專注度、每日一句。<br>
+          ・備份:匯出/匯入檔案,或 ☁️ GitHub 雲端備份(⚡ 全自動同步、上傳/下載合併/下載覆蓋、🕘 看以前的備份),手機電腦互相同步。<br>・🔍 全面體檢:改動累積夠多時提醒你,一鍵複製體檢指令。<br>・🗓 審查紀錄:各類審查上次做的日期,到期會提醒,一鍵複製審查指令。<br><br>
           <b>⌨️ 電腦快捷鍵</b>:空白鍵=開始/暫停、1/2/3=切換專注/短休/長休、F=全螢幕時鐘。
         </div>
       </details>
@@ -737,7 +737,7 @@
           1. (可選)先到「任務」頁新增要做的事,回來選好這一輪要做什麼。<br>
           2. 按「開始」專心做事,時間到會響鈴自動進入休息。<br>
           3. 休息完再按開始,進入下一輪。<br><br>
-          <b>按鈕說明:</b>「跳過」= 放棄這一輪不計入統計;「重設」= 這一輪重新來過;<b>「正計時模式」</b>= 不想被倒數壓迫時打開,改成做多久記多久,結束時按「完成」記錄。<br><br>
+          <b>按鈕說明:</b>「跳過」= 放棄這一輪不計入統計;「重設」= 這一輪重新來過;<b>「正計時模式」</b>= 不想被倒數壓迫時打開,改成做多久記多久(一輪最多記 4 小時),結束時按「完成」記錄。<br><br>
           上方的<b>情境按鈕</b>(預設有工作/讀書/放鬆,可以自己增刪修改)會一鍵幫你調好時長和背景音,不用每次設定。情境如果設了「自動連跑 N 輪」,按下去會用該情境的時長倒數(連跑需要固定的結束點才接得下去);若你原本開著正計時,跑完會自動恢復。
         </div>
       </details>
@@ -860,11 +860,11 @@
           ・效期(Expiration)建議選長一點,到期了再來換一次。<br>
           4. 按 Generate 後<b>馬上複製</b>那串金鑰(離開頁面就看不到了),回來貼到上面的欄位。<br><br>
           <b>安全性:</b>金鑰只存在這台裝置,不會跟著「匯出備份」流出;它只能動那個備份倉庫,動不了你 GitHub 的其他東西。每台裝置都要各貼一次。<br><br>
-          <b>救命功能:</b>萬一資料被誤刪或被別台蓋掉,按「🕘 看以前的備份」可以挑一個時間點還原——每次上傳都會在你的 GitHub 倉庫留一份歷史,不會只剩最新的那份。<br><br>
-          <b>日常用法:</b>設定完成後<b>什麼都不用做</b>——「⚡ 全自動同步」預設開啟:每次打開 App 自動從雲端下載合併,紀錄有變動後約 90 秒自動上傳,切到別的 App 時也會盡力上傳一次。手動三顆按鈕隨時可用;「下載並覆蓋」只有新裝置第一次還原時才用。<br><br>
-          <b>刪除也會同步:</b>你在手機刪掉的任務、音效組合、自訂情境,電腦同步後也會跟著消失,不會被另一台的舊備份救回來。<br><br>
+          <b>救命功能:</b>萬一資料被誤刪或被別台蓋掉,按「🕘 看以前的備份」可以挑一個時間點還原——每次上傳都會在你的 GitHub 倉庫留一份歷史,不會只剩最新的那份。還原後,那之後刪掉的也會救回來;開著自動同步的話,雲端現有的紀錄會再合併回來(兩邊都保留),救回來的也會傳到其他裝置。<br><br>
+          <b>日常用法:</b>設定完成後<b>什麼都不用做</b>——「⚡ 全自動同步」預設開啟:每次打開 App 自動從雲端下載合併,紀錄有變動後約 90 秒自動上傳(上傳前會先把別台剛傳的合併進來,兩台同時開著也不會互相蓋掉),切到別的 App 時也會盡力上傳一次。開 App 時沒網路的話,連上網後一有變動也會先合併再上傳。手動三顆按鈕隨時可用;「下載並覆蓋」只有新裝置第一次還原時才用。<br><br>
+          <b>刪除也會同步:</b>你在手機刪掉的任務、音效組合、自訂情境、專注紀錄,電腦同步後也會跟著消失,不會被另一台的舊備份救回來。<br><br>
           <b>設定也會同步:</b>專注時長、每日目標、健康提醒、音量、專注音效組合這些,以「最後修改的那台」為準。<br><br>
-          <b>編輯過的東西也會同步:</b>任務改名、按「復原」重新開啟任務、修改自訂情境或音效組合,都以「最後修改的那台」為準,不會被另一台的舊資料蓋回去。專注紀錄則是兩邊相加,不會互相蓋掉。
+          <b>編輯過的東西也會同步:</b>任務改名、按「復原」重新開啟任務、修改自訂情境或音效組合,都以「最後修改的那台」為準,不會被另一台的舊資料蓋回去。專注紀錄則是兩邊相加(沒刪掉的兩邊都保留),不會互相蓋掉。
         </div>
       </details>
     </section>
@@ -1112,7 +1112,11 @@ function warnSaveFail(){
   if(Date.now()-saveFailHiddenAt<10*60*1000) return;
   b.classList.add("show");
 }
-function hideSaveFail(){ const b=$("saveFailBar"); if(b) b.classList.remove("show"); saveFailHiddenAt=Date.now(); }
+function hideSaveFail(){
+  const b=$("saveFailBar"); if(b) b.classList.remove("show"); saveFailHiddenAt=Date.now();
+  // 紅框開著時排隊的提醒,收起來就接著跳(午睡等畫面開著就照舊等 checkReminders)
+  if(remQueue.length && !remBusy() && !$("remBanner").classList.contains("show")) fireRem(...remQueue.shift());
+}
 function fmtMs(ms){
   const total=Math.max(0,Math.round(ms/1000));
   const h=Math.floor(total/3600), m=Math.floor(total%3600/60), s=total%60;
@@ -1205,10 +1209,11 @@ function load(){
    關鍵:補出來的 id 必須是「同樣的內容在任何裝置都算出同一個值」,不能用亂數——
    否則兩台各補各的,同一筆會被當成兩筆,合併後變成重複。
    做法:用內容 + 「同內容的第幾筆」組出來,兩台算出來必定一致。 */
-function migrateSessionIds(){
+// list 不給 = 這台的 sessions;合併、匯入、還原時也拿它幫外來的舊紀錄補 id(同一套算法,兩邊才對得上)
+function migrateSessionIds(list){
   const seen={};
   let changed=false;
-  sessions.forEach(s=>{
+  (list||sessions).forEach(s=>{
     if(!s || s.id) return;
     const base=[s.d, s.m, s.t, s.task||""].join("|");
     seen[base]=(seen[base]||0)+1;
@@ -2469,7 +2474,7 @@ function deleteSession(id){
   if(i<0) return;
   const s=sessions[i];
   if(!confirm("刪除這筆紀錄?\n"+s.d+" "+String(s.t).padStart(2,"0")+" 點 · "+s.m+" 分鐘"
-    +"\n\n刪掉後統計、熱力圖、連續天數都會跟著扣掉,這個動作沒辦法復原。")) return;
+    +"\n\n刪掉後統計、熱力圖、連續天數都會跟著扣掉,這個動作沒辦法直接復原(有開雲端備份的話,可以從「🕘 看以前的備份」救回)。")) return;
   markDeleted("session", id);
   sessions.splice(i,1);
   saveData(); renderStats(); renderSessionList(); renderTasks();
@@ -2807,6 +2812,7 @@ function napRing(){
   }catch(e){}
   napWakeId=setTimeout(napRing,2500);
 }
+const NAP_HINT_HTML=$("napHint").innerHTML;   // 午睡畫面的原始提示,關掉時還原用
 function closeNap(){
   clearInterval(napTimerId); clearTimeout(napWakeId);
   napTimerId=null; napWakeId=null;
@@ -2815,7 +2821,7 @@ function closeNap(){
   $("napOv").classList.remove("open");
   $("napTime").style.display="none";
   $("napOpts").style.display="flex"; $("napStartBtn").style.display="";
-  $("napHint").textContent="小睡 10~30 分鐘能快速回血;選個助眠聲,鎖屏也能準時叫醒你";
+  $("napHint").innerHTML=NAP_HINT_HTML;   // 跟畫面上原本那句一樣(以前這裡是另一句舊的,08-09 只改了 HTML 那一處;2026-11-03 全面稽核)
 }
 
 /* ============ 主題與鍵盤快捷鍵 ============ */
@@ -2858,10 +2864,12 @@ let remHideId=null, remActionFn=null;
 let remQueue=[];
 // 午睡/呼吸/護眼/伸展畫面開著、或睡眠定時倒數中 = 不要吵他
 function remBusy(){
-  return ["napOv","breathOv","eyeOv","stretchOv"].some(id=>$(id) && $(id).classList.contains("open")) || sleepEndAt>0;
+  return ["napOv","breathOv","eyeOv","stretchOv"].some(id=>$(id) && $(id).classList.contains("open")) || sleepEndAt>0 || saveFailShown();
 }
+// 存檔失敗紅框開著時,提醒橫幅會在它底下跳出、20 秒後自己收掉,等於只聽到叮一聲(2026-11-03 全面稽核)→ 先排隊,按「知道了」再跳
+function saveFailShown(){ const b=$("saveFailBar"); return !!(b && b.classList.contains("show")); }
 function fireRem(icon,text,actionLabel,actionFn){
-  if($("remBanner").classList.contains("show")){ if(remQueue.length<5) remQueue.push([icon,text,actionLabel,actionFn]); return; }
+  if($("remBanner").classList.contains("show") || saveFailShown()){ if(remQueue.length<5) remQueue.push([icon,text,actionLabel,actionFn]); return; }
   $("remIcon").textContent=icon;
   $("remText").textContent=text;
   const ab=$("remAction");
@@ -3007,15 +3015,21 @@ function importBackup(input){
     // 開著雲端自動同步時,單純覆蓋本機沒有意義——下次開 App 會把雲端的又合併回來。
     // 所以直接問清楚,不要讓結果取決於「有沒有撐過 90 秒」(2026-08-09 全面稽核找到)。
     if(loadGh() && ghAutoEnabled()){
-      if(confirm("你有開雲端自動同步。\n要把剛匯入的這份資料「上傳覆蓋雲端」嗎?\n\n按確定:雲端也換成這份(雲端原本的會被取代)。\n按取消:只有這台換,下次開 App 雲端的資料會再合併回來。")){
+      if(confirm("你有開雲端自動同步。\n要把剛匯入的這份資料「上傳覆蓋雲端」嗎?\n\n按確定:雲端也換成這份(雲端原本的會被取代)。\n按取消:雲端不動;稍後自動同步時,雲端原有的紀錄會跟這份合併回來(兩邊都保留)。")){
         ghSyncedOk=true; ghDoUpload();
-      }else{ ghSyncedOk=true; }
+      }
+      // 按取消:什麼都不用做。applyImport() 已把 ghKnownSha 清掉,下一次自動上傳會先下載合併、不會整份蓋掉雲端。
+      // (以前這裡把 ghSyncedOk 設成 true,90 秒後就拿匯入的資料直接蓋掉雲端;2026-11-03 全面稽核三位稽核都實測到)
     }
   };
   reader.readAsText(file);
 }
 function applyImport(data){
   sessions=data.sessions;
+  // 2026-08-09 以前的備份沒有 id:馬上補(以前要等重新整理才補,中間上傳出去的沒 id 紀錄,別台合併後會翻倍;2026-11-03 全面稽核)
+  migrateSessionIds();
+  // 這台整份換掉了,不再包含上次看到的雲端內容 → 下次自動上傳要先下載合併,不可以直接蓋雲端
+  ghKnownSha=null; ghGen++;
   const s=data.settings||{};
   settings={...DEFAULT_SETTINGS, ...s, health:{}};
   for(const k in DEFAULT_SETTINGS.health)
@@ -3036,6 +3050,9 @@ function applyImport(data){
   settingsSnap=settingsSnapshot();
   waterLog=(data.waterLog&&typeof data.waterLog==="object")?data.waterLog:{};
   lsSet("pomo_water",JSON.stringify(waterLog));
+  // 「覆蓋」= 變成備份檔的樣子:任務/組合/情境保留檔案裡的修改時間,不要被下面的 saveData() 蓋成「這台剛改過」
+  // (跟上面 settingsAt 保留檔案的值同一個道理;2026-11-03 全面稽核)
+  touchChangedItems(true);
   saveData();
   applySettingsToUI(); applyHealthToUI(); applyTheme(); renderTasks(); renderStats();
   renderSoundGrid(); renderFavs(); renderQuote(); renderPresets(); scheduleAllRems();
@@ -3070,18 +3087,25 @@ function ghFriendly(status){
   if(status===401) return "金鑰無效或已過期(401)。請到 GitHub 重新建立金鑰,再回來更新設定。";
   if(status===403) return "權限不足(403)。請確認金鑰對這個倉庫有「Contents 讀寫」權限。";
   if(status===404) return "找不到倉庫(404)。請確認「帳號/倉庫名稱」拼寫正確,且金鑰有選到這個倉庫。";
+  if(status===409||status===422) return "雲端備份剛被另一台更新過("+status+"),這次沒有上傳、雲端也沒被蓋掉。自動同步下次會先合併再傳;手動的話請先按「下載並合併」再上傳。";
   return "GitHub 回應錯誤("+status+"),請稍後再試。";
 }
+/* 讀雲端一律 cache:"no-store"(2026-11-03 全面稽核):GitHub 的回應帶「60 秒內可以直接用舊的」,
+   不加的話,瀏覽器可能把一分鐘前的舊備份/舊版本代號當成剛下載的——跟 sw.js 快取舊回應同一型的問題。 */
+const GH_NO_STORE={cache:"no-store"};
 async function ghFindSha(cfg){
-  const res=await fetch("https://api.github.com/repos/"+cfg.owner+"/"+cfg.repo+"/contents/",{headers:ghHeaders(cfg.token)});
+  const res=await fetch("https://api.github.com/repos/"+cfg.owner+"/"+cfg.repo+"/contents/",{...GH_NO_STORE, headers:ghHeaders(cfg.token)});
   if(res.status===404) return undefined; // 空倉庫也會 404,當作新檔
   if(!res.ok) throw new Error(ghFriendly(res.status));
   const list=await res.json();
   return Array.isArray(list) ? (list.find(f=>f.name===GH_BACKUP_PATH)||{}).sha : undefined;
 }
-async function ghUpload(){
-  const cfg=loadGh(); if(!cfg) return;
-  const sha=await ghFindSha(cfg);
+/* knownSha:自動上傳傳進來「合併前看到的雲端版本代號」(null=雲端還沒有檔案)。中間被別台更新過,
+   GitHub 會拒絕(409),不會蓋掉別台剛傳的。沒傳(手動按「上傳備份」)= 使用者要整份覆蓋,上傳前才抓最新代號。
+   回傳上傳後的新版本代號(讀不到就 null)。 */
+async function ghUpload(knownSha){
+  const cfg=loadGh(); if(!cfg) return null;
+  const sha=(knownSha===undefined) ? await ghFindSha(cfg) : (knownSha||undefined);
   const res=await fetch("https://api.github.com/repos/"+cfg.owner+"/"+cfg.repo+"/contents/"+encodeURIComponent(GH_BACKUP_PATH),{
     method:"PUT",
     headers:{...ghHeaders(cfg.token), "Content-Type":"application/json"},
@@ -3093,11 +3117,13 @@ async function ghUpload(){
   });
   if(!res.ok) throw new Error(ghFriendly(res.status));
   lsSet("pomo_lastexport", todayStr()); // 雲端備份也算有備份
+  let j=null; try{ j=await res.json(); }catch(e){}
+  return (j && j.content && j.content.sha) || null;
 }
 async function ghDownload(){
   const cfg=loadGh(); if(!cfg) return null;
   const res=await fetch("https://api.github.com/repos/"+cfg.owner+"/"+cfg.repo+"/contents/"+encodeURIComponent(GH_BACKUP_PATH),{
-    headers:{...ghHeaders(cfg.token), Accept:"application/vnd.github.raw+json"}
+    ...GH_NO_STORE, headers:{...ghHeaders(cfg.token), Accept:"application/vnd.github.raw+json"}
   });
   if(res.status===404) throw new Error("雲端還沒有備份檔。請先在另一台裝置按「上傳備份」。");
   if(!res.ok) throw new Error(ghFriendly(res.status));
@@ -3146,6 +3172,9 @@ function mergeBackup(data){
        只數字串會出事:上傳時還沒填專注度、回來才填,兩邊字串就不一樣 →
        同一輪會變成兩筆,統計永遠多一顆(2026-08-09 稽核驗收抓到,是修第一版時自己造成的)。
      ②沒有 id 的舊紀錄 → 才退回「數份數」,補不足的份數。 */
+  // 外來的舊紀錄(2026-08-09 以前的備份)先用同一套算法補 id——這台的舊紀錄載入時就是這樣補的,
+  // 兩邊才認得出是同一筆;不補的話會走下面「數份數」,跟這台已有 id 的同一批紀錄對不上而翻倍(2026-11-03 全面稽核實測 3 筆變 6 筆)
+  if(Array.isArray(data.sessions)) migrateSessionIds(data.sessions);
   const withId=new Map();
   sessions.forEach(s=>{ if(s && s.id) withId.set(s.id, s); });
   const tally = arr => {
@@ -3209,6 +3238,10 @@ function mergeBackup(data){
   lsSet("pomo_water",JSON.stringify(waterLog));
   roundCount=Math.max(roundCount, parseInt(data.roundCount,10)||0);
   lsSet("pomo_rounds",String(roundCount));
+  /* 合併換進來的任務/組合/情境帶著對方的修改時間,不可以被下面的 saveData() 當成「這台剛改過」蓋成現在——
+     否則一份沒人動過的舊版,合併之後反而比別台真正較新的修改還新,把它蓋回去(2026-11-03 全面稽核實測:
+     B 改的任務名被打回原名)。設定那邊在 ①b 用 settingsSnap 擋住,這裡是項目版的同一道。 */
+  touchChangedItems(true);
   saveData();
   renderTasks(); renderStats(); renderFavs(); renderPresets(); renderWater();
 }
@@ -3241,9 +3274,15 @@ function ghUpdateStatusLine(){
   el.textContent="上次自動同步:"+t+" "+(s.action==="upload"?"上傳":"下載")+(s.ok?" ✅":" ❌ "+(s.msg||""));
 }
 let ghDirty=false, ghAutoBusy=false, ghUploadTimer=null;
-// 這一輪(這次開 App)有沒有成功跟雲端對過帳。沒有的話禁止自動上傳,見 ghAutoUpload()。
+// 這一輪(這次開 App)有沒有成功跟雲端對過帳。沒有的話自動上傳前要先對帳,對不了就不傳,見 ghAutoUpload()。
 // 手動按「上傳備份」不受限制——那是使用者自己明確要求的。
 let ghSyncedOk=false;
+// 這台最後一次「跟雲端一致」時的雲端版本代號(只記在記憶體)。自動上傳前看到的代號跟它不一樣
+// = 別台在中間上傳過(或這台的資料被匯入/還原整份換掉),要先下載合併再上傳(2026-11-03 全面稽核)。
+let ghKnownSha=null;
+// 換代計數:這台被整份換掉(匯入/還原/下載並覆蓋)或換倉庫時 +1。上傳途中換代了,回來的版本代號就不能記——
+// 否則它會把剛清掉的 ghKnownSha 寫回舊值,下一次自動上傳就不合併、直接蓋掉雲端(2026-11-03 驗收抓到)。
+let ghGen=0;
 const GH_UPLOAD_DEBOUNCE=90000; // 最後一次變更後 90 秒才上傳,使用中不會狂傳
 function ghMarkDirty(){
   if(!loadGh()||!ghAutoEnabled()) return;
@@ -3254,35 +3293,52 @@ function ghMarkDirty(){
 async function ghAutoUpload(){
   if(!ghDirty||ghAutoBusy) return;
   const cfg=loadGh(); if(!cfg||!ghAutoEnabled()) return;
-  /* 🔴 這一輪還沒成功跟雲端對過帳,就絕對不能自動上傳。
-     上傳是整份 PUT 覆蓋、雲端沒有版本歷史,所以「拿還沒合併過的本機資料上傳」
-     = 直接蓋掉別台裝置的紀錄。兩種踩得到的情況:
-       ①新裝置貼完金鑰、還沒按「下載並覆蓋」就改了東西 → 90 秒後用空資料蓋掉雲端
-       ②開 App 時離線,自動下載失敗 → 上線後照樣整份覆蓋
-     (2026-08-09 全面稽核找到) */
-  if(!ghSyncedOk) return;
+  /* 🔴 絕對不能拿「還沒合併過雲端」的本機資料自動上傳。
+     上傳是整份 PUT 覆蓋(舊版本留在 GitHub 歷史裡,但別台不會自己去撿回來),
+     所以「拿沒合併過的資料上傳」= 雲端少掉別台的紀錄。踩得到的情況:
+       ①新裝置貼完金鑰、還沒下載成功就改了東西 ②開 App 時離線,自動下載失敗(2026-08-09 全面稽核找到)
+       ③兩台都開著,另一台在中間上傳過 ④匯入/還原把這台整份換掉之後 ⑤換了倉庫(2026-11-03 全面稽核找到)
+     做法:這次開 App 還沒對過帳就先對帳,對不了就不傳;雲端版本代號跟上次一致時看到的不一樣,就先下載合併;
+     上傳時帶著合併前看到的代號,中間又被別台改過,GitHub 會拒絕(409),下次再來,不會蓋掉。 */
+  if(!ghSyncedOk){
+    await ghAutoDownload();
+    if(!ghSyncedOk) return;
+  }
   if(typeof navigator!=="undefined" && navigator.onLine===false) return;
   ghAutoBusy=true;
+  const gen=ghGen;
   try{
-    await ghUpload();
-    ghDirty=false;
+    const sha=(await ghFindSha(cfg))||null;
+    if(sha && sha!==ghKnownSha) ghMergeIn(await ghDownload());
+    const newSha=await ghUpload(sha);
+    if(gen===ghGen){ ghKnownSha=newSha; ghDirty=false; }
+    else ghKnownSha=null;   // 上傳途中這台被整份換掉或換了倉庫:下次一律先合併
     ghRecordStatus({at:Date.now(), ok:true, action:"upload"});
   }catch(e){
+    ghKnownSha=null;   // 不確定雲端現在是哪一版,下次一律先合併
     ghRecordStatus({at:Date.now(), ok:false, action:"upload", msg:e.message});
   }
   ghAutoBusy=false;
 }
+// 把雲端下載來的備份合併進這台;有多出紀錄就提示一下
+function ghMergeIn(data){
+  const before=sessions.length, failBefore=saveFailCount;
+  mergeBackup(data);
+  if(sessions.length>before) toast(saveResultMsg(failBefore, "已自動同步:從雲端合併了 "+(sessions.length-before)+" 筆紀錄", "☁️"));
+}
 async function ghAutoDownload(){
   const cfg=loadGh(); if(!cfg||!ghAutoEnabled()) return;
-  if(typeof navigator!=="undefined" && navigator.onLine===false) return;
+  if(typeof navigator!=="undefined" && navigator.onLine===false){
+    // 以前什麼都不說,整段使用期間都不會自動上傳(2026-11-03 全面稽核)。現在至少在狀態列講明;
+    // 連上網後一有變動,ghAutoUpload() 會先對帳再上傳。
+    ghRecordStatus({at:Date.now(), ok:false, action:"download", msg:"沒有網路,還沒跟雲端對帳;連上網後一有變動會先合併再上傳"});
+    return;
+  }
   ghAutoBusy=true;
   try{
-    const data=await ghDownload();
-    const before=sessions.length, failBefore=saveFailCount;
-    mergeBackup(data);
+    ghMergeIn(await ghDownload());
     ghSyncedOk=true;
     ghRecordStatus({at:Date.now(), ok:true, action:"download"});
-    if(sessions.length>before) toast(saveResultMsg(failBefore, "已自動同步:從雲端合併了 "+(sessions.length-before)+" 筆紀錄", "☁️"));
   }catch(e){
     // 雲端還沒有備份檔是正常情況(第一次用),不當作錯誤,而且這種情況可以放行上傳
     if(String(e.message).includes("還沒有")) ghSyncedOk=true;
@@ -3298,7 +3354,8 @@ function ghStatus(msg){ const el=$("ghStatus"); if(el) el.textContent=msg; }
 async function ghDoUpload(){
   if(ghBusy) return; ghBusy=true; ghStatus("⏳ 上傳中…");
   try{
-    await ghUpload(); ghDirty=false; ghSyncedOk=true;
+    const gen=ghGen, newSha=await ghUpload();
+    if(gen===ghGen){ ghKnownSha=newSha; ghDirty=false; ghSyncedOk=true; } else ghKnownSha=null;
     ghStatus("✅ 上傳完成!雲端備份已更新("+new Date().toLocaleTimeString("zh-TW")+")");
   }
   catch(e){ ghStatus("❌ "+e.message); }
@@ -3308,7 +3365,7 @@ async function ghDoMerge(){
   if(ghBusy) return; ghBusy=true; ghStatus("⏳ 下載中…");
   try{
     const data=await ghDownload();
-    if(confirm("雲端備份有 "+data.sessions.length+" 筆專注紀錄、"+((data.tasks||[]).length)+" 個任務。\n將與這台裝置的資料合併。\n專注紀錄兩邊都保留;另一台刪掉的任務／音效組合／情境,這台也會跟著消失。繼續嗎?")){
+    if(confirm("雲端備份有 "+data.sessions.length+" 筆專注紀錄、"+((data.tasks||[]).length)+" 個任務。\n將與這台裝置的資料合併。\n專注紀錄兩邊都保留;另一台刪掉的任務／音效組合／情境／專注紀錄,這台也會跟著消失。繼續嗎?")){
       const failBefore=saveFailCount;
       mergeBackup(data); ghSyncedOk=true;
       ghStatus(saveResultMsg(failBefore, "合併完成!目前共 "+sessions.length+" 筆專注紀錄"));
@@ -3323,7 +3380,7 @@ async function ghListHistory(){
   const cfg=loadGh(); if(!cfg) return [];
   const url="https://api.github.com/repos/"+cfg.owner+"/"+cfg.repo
     +"/commits?path="+encodeURIComponent(GH_BACKUP_PATH)+"&per_page=15";
-  const res=await fetch(url,{headers:ghHeaders(cfg.token)});
+  const res=await fetch(url,{...GH_NO_STORE, headers:ghHeaders(cfg.token)});
   if(res.status===404) throw new Error("雲端還沒有備份檔。");
   if(!res.ok) throw new Error(ghFriendly(res.status));
   const list=await res.json();
@@ -3353,7 +3410,7 @@ async function ghShowHistory(){
     const box=$("ghHistory");
     box.style.display="block";
     box.innerHTML='<div class="hour-note" style="margin-bottom:8px">'
-      + '每一列都是一次上傳。選一個會<b>完全換成那個時間點的資料</b>,按下去之前會再確認一次。</div>'
+      + '每一列都是一次上傳。選一個,這台會<b>先換成那個時間點的資料</b>(那之後刪掉的也會救回來),按下去之前會再確認一次。</div>'
       + list.map(c=>{
           const t=c.when ? new Date(c.when).toLocaleString("zh-TW") : "(時間不明)";
           return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;'
@@ -3368,17 +3425,48 @@ async function ghShowHistory(){
   }catch(e){ ghStatus("❌ "+e.message); }
   ghBusy=false;
 }
+/* 還原時把「那之後被刪掉」的東西救回來(2026-11-03 全面稽核):只換掉這台的墓碑沒有用——
+   別台還留著墓碑,合併時又會把它刪掉,說明寫的「誤刪救得回來」就不成立。
+   做法:那個版本裡、現在已經立了墓碑的,建立時間改成現在(比墓碑晚 = 刪掉後又重建,isTombed() 放行),
+   這樣傳到哪一台都不會再被墓碑擋掉。 */
+function reviveTombed(data){
+  const now=Date.now();
+  if(Array.isArray(data.sessions)) migrateSessionIds(data.sessions);   // 舊版本的紀錄先補 id,才認得出被刪的是哪一筆
+  [["session",data.sessions,s=>s.id],["task",data.tasks,t=>t.id],["fav",data.favMixes,favKey],["preset",data.presets,p=>p.id]]
+    .forEach(([kind,list,key])=>{
+      (Array.isArray(list)?list:[]).forEach(it=>{ if(it && isTombed(kind, key(it), it.createdAt)) it.createdAt=now; });
+    });
+}
+/* 還原 = 那個版本的任務/組合/情境與設定「以它為準」:修改時間改成現在(2026-11-03 驗收抓到)。
+   不改的話它們帶著舊的修改時間,自動同步一合併就輸給雲端較新的那版,被改壞的名字、改錯的設定又蓋回來。
+   (匯入與「下載並覆蓋」不走這裡:它們是「變成檔案的樣子」,保留檔案裡的時間。) */
+function markRestoredNewest(data){
+  const now=Date.now();
+  [[data.tasks,tasks,t=>t.id],[data.favMixes,favMixes,favKey],[data.presets,presets,p=>p.id]].forEach(([list,cur,key])=>{
+    (Array.isArray(list)?list:[]).forEach(it=>{
+      if(!it) return;
+      const mine=(cur||[]).find(x=>x && key(x)===key(it));
+      it.updatedAt=Math.max(now, (+it.updatedAt||0)+1, mine ? (+mine.updatedAt||0)+1 : 0);
+    });
+  });
+  if(data.settings) data.settingsAt=Math.max(now, settingsAt+1, (parseInt(data.settingsAt,10)||0)+1);
+}
 async function ghRestore(sha, whenText){
   if(ghBusy) return; ghBusy=true; ghStatus("⏳ 下載那個版本…");
   try{
     const data=await ghDownloadAt(sha);
+    const autoOn=ghAutoEnabled();
     if(confirm("要還原成 "+whenText+" 那個版本嗎?\n\n"
       + "那個版本有 "+data.sessions.length+" 筆專注紀錄、"+((data.tasks||[]).length)+" 個任務。\n"
-      + "這台裝置目前的資料("+sessions.length+" 筆)會被完全取代。")){
+      + "這台裝置目前的資料("+sessions.length+" 筆)會先換成那個版本(任務、情境、設定以那個版本為準),那之後刪掉的也會救回來。"
+      + (autoOn ? "\n開著自動同步,稍後同步時雲端現有的專注紀錄會再合併回來(兩邊都保留),那個版本的任務與設定也會傳到其他裝置。" : "\n只改這台,雲端不會動。"))){
       const failBefore=saveFailCount;
+      reviveTombed(data); markRestoredNewest(data);
       applyImport(data); ghSyncedOk=true;
       $("ghHistory").style.display="none";
-      ghStatus(saveResultMsg(failBefore, "已還原成 "+whenText+" 的版本")+"。要讓其他裝置也變成這樣,請按「上傳備份」。");
+      ghStatus(saveResultMsg(failBefore, "已還原成 "+whenText+" 的版本")
+        + (autoOn ? "。約 90 秒後自動同步:雲端現有的紀錄會合併回來,救回來的資料也會傳到其他裝置。"
+                  : "(只改了這台)。要存上雲端請按「上傳備份」,其他裝置按「下載並合併」就拿得到救回來的資料。"));
     }else ghStatus("已取消");
   }catch(e){ ghStatus("❌ "+e.message); }
   ghBusy=false;
@@ -3405,32 +3493,41 @@ function ghSaveConfig(){
     ghStatus("❌ 存不進去:這台裝置的瀏覽器存檔空間滿了(或被擋住),雲端設定沒有存起來。");
     return;
   }
+  // 可能換了倉庫或金鑰:跟舊倉庫對過的帳不算數,要重新對(2026-11-03 全面稽核:沿用舊的,新倉庫的備份會被蓋掉)
+  ghSyncedOk=false; ghKnownSha=null; ghGen++; ghEditing=false;
   ghRender();
   ghStatus("✅ 設定已儲存(只存在這台裝置)。正在跟雲端對帳…");
   // 🔴 一定要先下載對帳再說。少了這一步,新裝置隨手改個設定,90 秒後就會用
   //    幾乎空的資料整份覆蓋掉雲端備份(2026-08-09 全面稽核找到)。
   const failBefore=saveFailCount;
   ghAutoDownload().then(()=>{
-    ghStatus(ghSyncedOk
+    ghRender();   // 先重畫再寫狀態:反過來的話 ghRender() 會換一個空白的 #ghStatus,這句永遠看不到(2026-11-03 全面稽核)
+    ghStatus(!ghAutoEnabled()
+      ? "✅ 設定已儲存。自動同步是關著的,請用上面的按鈕手動「上傳備份」或「下載並合併」。"
+      : ghSyncedOk
       ? saveResultMsg(failBefore, "設定完成,已跟雲端對帳。之後會自動同步,不用再手動按")+(saveFailCount===failBefore?"。":"")
-      : "⚠️ 設定已存,但還連不上雲端。連得上之前不會自動上傳,以免蓋掉雲端備份。");
-    ghRender();
+      : "⚠️ 設定已存,但還連不上雲端。連上之後一有變動,會先跟雲端合併再上傳,不會蓋掉雲端備份。");
   });
 }
 function ghClearConfig(){
   if(!confirm("清除這台裝置上的雲端備份設定?(雲端的備份檔不會被刪)")) return;
   localStorage.removeItem(GH_KEY);
+  ghSyncedOk=false; ghKnownSha=null; ghGen++; ghDirty=false; ghEditing=false; clearTimeout(ghUploadTimer);
   ghRender();
 }
+// 「✏️ 修改設定」中:表單填好按儲存才換;按取消或沒按就走開,原本的設定照用(以前一按就先把設定刪掉,
+// 沒按儲存就離開的話,雲端同步就悄悄停了;2026-11-03 全面稽核)
+let ghEditing=false;
 function ghRender(){
   const card=$("ghCard"); if(!card) return;
   const cfg=loadGh();
-  if(!cfg){
+  if(!cfg || ghEditing){
     card.innerHTML=
       '<div style="font-size:13px;color:var(--dim);line-height:1.7;margin-bottom:10px">把備份存到你自己的 GitHub 私人倉庫,手機和電腦就能互相同步紀錄。設定方法看下面的教學(已設定過英文學習 App 的話,填一樣的即可)。</div>'
       +'<input type="text" id="ghRepo" placeholder="帳號/倉庫名,例如 zaker353/my-backup" style="width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:14px;font-family:inherit;margin-bottom:8px">'
       +'<input type="password" id="ghToken" placeholder="金鑰(token),貼上後按儲存" style="width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:14px;font-family:inherit;margin-bottom:10px">'
       +'<button class="btn" style="width:100%;background:var(--accent);color:#fff" onclick="ghSaveConfig()">💾 儲存設定</button>'
+      +(ghEditing && cfg ? '<button class="btn" style="width:100%;margin-top:8px;background:var(--card2);color:var(--dim)" onclick="ghCancelEdit()">取消(照用原本的設定)</button>' : '')
       +'<div id="ghStatus" style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.6"></div>';
   }else{
     card.innerHTML=
@@ -3443,7 +3540,7 @@ function ghRender(){
       +'<div style="font-size:12px;color:var(--dim);margin-top:10px;line-height:1.8">'
       +'☁️ <b style="color:var(--text)">上傳備份</b>:把這台裝置的紀錄存上雲端(取代雲端的舊備份)。<br>'
       +'⬇️ <b style="color:var(--text)">下載並合併</b>:把雲端和這台裝置的紀錄「加在一起」,兩邊都保留、不會弄丟——日常同步用這顆最安全。<br>'
-      +'<span style="color:var(--dim)">　（你在任何一台刪掉的任務／音效組合／情境,合併時不會再被另一台救回來。<br>　　設定、音量、專注音效組合則是「最後改的那台說了算」。）</span><br>'
+      +'<span style="color:var(--dim)">　（你在任何一台刪掉的任務／音效組合／情境／專注紀錄,合併時不會再被另一台救回來。<br>　　設定、音量、專注音效組合則是「最後改的那台說了算」。）</span><br>'
       +'⬇️ <b style="color:var(--text)">下載並覆蓋</b>:把這台裝置的紀錄<b>全部刪掉</b>,完全換成雲端備份——只建議換新手機/新電腦「第一次還原」時用,按下去會再跟你確認一次。<br>🕘 <b style="color:var(--text)">看以前的備份</b>:每次上傳都會在你的倉庫留下一份歷史。萬一資料被誤刪或被蓋掉,從這裡挑一個時間點就能救回來。'
       +'</div>'
       +'<div class="backup-btns" style="margin-top:10px">'
@@ -3465,10 +3562,11 @@ function ghRender(){
 }
 function ghRenderEdit(){
   const cfg=loadGh();
-  localStorage.removeItem(GH_KEY);
+  ghEditing=true;
   ghRender();
   if(cfg && $("ghRepo")) $("ghRepo").value=cfg.owner+"/"+cfg.repo;
 }
+function ghCancelEdit(){ ghEditing=false; ghRender(); }
 
 /* ============ 設定 ============ */
 function applySettingsToUI(){
@@ -3540,7 +3638,7 @@ const AUDIT_PROMPT = [
   "",
   "【要查什麼】",
   "1. 功能互相衝突:兩個功能同時開會不會打架(例:嚴格模式 + 快捷鍵、自動同步 + 匯入覆蓋)。",
-  "2. 說明文字過時:畫面上的說明、提示、空狀態、設定頁裡「使用說明」「實用建議」共 8 篇摺疊說明與統計頁那 1 篇,還符合現在的功能嗎?",
+  "2. 說明文字過時:畫面上的說明、提示、空狀態、設定頁裡「使用說明」「實用建議」與雲端備份教學共 9 篇摺疊說明、統計頁那 1 篇,還符合現在的功能嗎?",
   "3. 只改一邊:同一件事在「設定、畫面、備份欄位、合併邏輯、測試、README」有沒有漏掉哪一處。",
   "4. 資料安全:會不會弄丟紀錄?刪除有沒有立墓碑?新欄位有沒有進 buildBackupData 和 mergeBackup?",
   "5. 離線快取:sw.js 的 FILES 清單有沒有漏掉新檔案?清快取有沒有只刪 pomo- 開頭的?",

@@ -1,6 +1,6 @@
 // 離線快取:第一次開啟後,之後沒網路也能用
 const CACHE_PREFIX = "pomo-";
-const CACHE = CACHE_PREFIX + "v27";
+const CACHE = CACHE_PREFIX + "v28";
 const FILES = [
   "./", "./index.html", "./audit-info.js", "./review-log.js", "./manifest.json", "./icon-192.png", "./icon-512.png",
   "./sounds/rain.mp3", "./sounds/ocean.mp3", "./sounds/cafe.mp3",
@@ -34,12 +34,20 @@ self.addEventListener("activate", e => {
   );
 });
 
+// 只管「自己網站的 GET」,而且只把成功的回應存進快取(2026-11-03 全面稽核):
+// 原本連 api.github.com 的雲端備份回應也存進快取,連不上 GitHub 時(訊號差、公共 Wi-Fi 要先登入)
+// 就把舊的雲端備份當成剛下載的交回去——App 以為已經跟雲端對過帳(CLAUDE.md 第 26 條)。
+// 跨網域的請求不呼叫 respondWith,交給瀏覽器照常處理(連不上就是連不上)。
+// 404/500 這類錯誤回應也不存,免得蓋掉快取裡原本好好的那份。
 self.addEventListener("fetch", e => {
+  if (e.request.method !== "GET" || new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
     fetch(e.request).then(res => {
       // 有網路:拿新版並更新快取
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      }
       return res;
     }).catch(() => caches.match(e.request)) // 沒網路:用快取
   );
