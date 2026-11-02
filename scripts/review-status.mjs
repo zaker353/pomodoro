@@ -3,7 +3,7 @@
 // 全面體檢不在這裡,看 npm run audit-count。
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { loadReviewLog, reviewStatuses, todayYmd } from "./review-log.mjs";
+import { loadReviewLog, reviewStatuses, todayYmd, pendingProposal, PROPOSE_BY } from "./review-log.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const data = loadReviewLog(ROOT);
@@ -25,3 +25,8 @@ const due = rows.filter(r => r.state === "due");
 console.log(due.length
   ? "\n" + due.length + " 類已到期:" + due.map(r => r.name).join("、") + "。到 App 設定頁「🗓 審查紀錄」卡複製該類的審查指令貼給 Claude。"
   : "\n目前沒有到期的審查。");
+const pp = pendingProposal(data.categories, today);
+console.log(pp.due
+  ? "\n💡 該提出待提的建議了:" + (pp.notYet.length ? "已到保底日期 " + PROPOSE_BY + "(還沒單獨審過:" + pp.notYet.join("、") + ")" : "五類都單獨審查過一次")
+    + "——全面體檢要不要改成只看兩類之間的縫+快到期的類別(見 CLAUDE.md 第 39 條)。"
+  : "\n(還沒用各類審查指令單獨審過:" + pp.notYet.join("、") + ";五類到齊或到 " + PROPOSE_BY + " 要提全面體檢的分工,見 CLAUDE.md 第 39 條)");

@@ -1002,6 +1002,19 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   const rlFake = rl.categories.filter(c=>c.lastReviewedAt && new Date(c.lastReviewedAt+"T00:00:00Z").toISOString().slice(0,10)!==c.lastReviewedAt);
   check("🗓 日期是真的存在的日子(沒有 2 月 30 日這種)", rlFake.length===0, rlFake.map(c=>c.id).join(","));
   check("🗓 全面體檢不混進審查類別(它有自己的計數)", !rl.categories.some(c=>/全面體檢|全面稽核/.test(c.name+c.id)));
+  // 2026-11-03 加的欄位:lastStandaloneAt(單獨審查日)、improveHint(改良方向)、declinedIdeas(否決清單)
+  const rlBad2 = rl.categories.filter(c=>!(
+    (c.lastStandaloneAt===null || (typeof c.lastStandaloneAt==="string" && /^\d{4}-\d{2}-\d{2}$/.test(c.lastStandaloneAt)
+      && new Date(c.lastStandaloneAt+"T00:00:00Z").toISOString().slice(0,10)===c.lastStandaloneAt))
+    && typeof c.improveHint==="string" && c.improveHint.length>10
+    && Array.isArray(c.declinedIdeas) && c.declinedIdeas.every(x=>typeof x==="string" && /^\d{4}-\d{2}-\d{2} \S/.test(x))));
+  check("🗓 每一類都有單獨審查日、改良方向、否決清單(格式正確)", rlBad2.length===0, rlBad2.map(c=>c.id||"?").join(","));
+  // 單獨審查也會改 lastReviewedAt,所以單獨審查日不會在未來、也不會晚於上次審查日
+  const rlStandBad = rl.categories.filter(c=>c.lastStandaloneAt && (c.lastStandaloneAt>TODAY || !c.lastReviewedAt || c.lastStandaloneAt>c.lastReviewedAt));
+  check("🗓 單獨審查日不在未來、不晚於上次審查日", rlStandBad.length===0, rlStandBad.map(c=>c.id+"="+c.lastStandaloneAt).join(","));
+  // 五類的範圍、週期、方向與審查指令本身要有人管(CLAUDE.md 第 38 條)
+  const rlRules = rl.categories.find(c=>c.id==="rules");
+  check("🗓 規則審查的範圍包含 review-log.json 與審查指令", !!rlRules && rlRules.scope.includes("review-log.json") && rlRules.scope.includes("reviewPrompt()") && rlRules.scope.includes("AUDIT_PROMPT"));
   // 產生檔跟來源一致(產生器壞了、或有人手改 review-log.js 就紅)
   const rlJs = fs.readFileSync(path.join(__dirname, "..", "review-log.js"), "utf8");
   const rlFromJs = (()=>{ const m=/window\.REVIEW_LOG = ([\s\S]*);\s*$/.exec(rlJs); return m?JSON.parse(m[1]):null; })();
@@ -1013,6 +1026,45 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   const appStates = E("reviewStatuses("+JSON.stringify(FIX)+").map(r=>r.id+':'+r.state+':'+r.daysLeft+':'+r.dueAt).join('|')");
   const nodeStates = rlLib.reviewStatuses(rl, FIX).map(r=>r.id+":"+r.state+":"+r.daysLeft+":"+r.dueAt).join("|");
   check("🗓 App 與 node 腳本對同一天算出同樣的到期狀態", appStates===nodeStates, appStates+" vs "+nodeStates);
+  // 待提的建議(CLAUDE.md 第 39 條):五類都單獨審過、或到保底日期 → 該提;否則列出還沒單獨審過的
+  const PB = rlLib.PROPOSE_BY;
+  const dayBefore = new Date(Date.parse(PB+"T00:00:00Z")-86400000).toISOString().slice(0,10);
+  const ppAll = rlLib.pendingProposal([{name:"甲",lastStandaloneAt:"2026-01-01"},{name:"乙",lastStandaloneAt:"2026-02-01"}], "2026-03-01");
+  const ppSome = rlLib.pendingProposal([{name:"甲",lastStandaloneAt:"2026-01-01"},{name:"乙",lastStandaloneAt:null}], dayBefore);
+  const ppLate = rlLib.pendingProposal([{name:"甲",lastStandaloneAt:"2026-01-01"},{name:"乙",lastStandaloneAt:null}], PB);
+  check("🗓 待提的建議:五類都單獨審過就該提", ppAll.due===true && ppAll.notYet.length===0);
+  check("🗓 待提的建議:還有類別沒單獨審過、保底日前一天不提,並列出是哪一類", ppSome.due===false && ppSome.notYet.join()==="乙");
+  check("🗓 待提的建議:保底日當天就算沒到齊也該提", ppLate.due===true && ppLate.notYet.join()==="乙");
+  check("🗓 保底日期是真的日子", /^\d{4}-\d{2}-\d{2}$/.test(PB) && dayBefore<PB);
+  // review-status 真的有接上這個判斷(用今天的真實資料算一次,看印出來的字一不一樣)
+  const rsOut = require("child_process").execFileSync(process.execPath, [path.join(__dirname, "..", "scripts", "review-status.mjs")], {encoding:"utf8"});
+  const ppNow = rlLib.pendingProposal(rl.categories, rlLib.todayYmd());
+  check("🗓 npm run review-status 會印待提的建議狀態",
+    ppNow.due ? rsOut.includes("💡 該提出待提的建議了") : rsOut.includes("(還沒用各類審查指令單獨審過:"+ppNow.notYet.join("、")+";"),
+    rsOut.split("\n").slice(-2).join(" / "));
+  // 真實的五類指令:每一類都帶自己的改良方向、否決清單、最多 3 條、檢查指令本身、上次單獨審查
+  const rlPromptBad = rl.categories.filter(c=>{
+    const p = E("reviewPrompt("+JSON.stringify(c.id)+",'2026-11-03')");
+    return !(p.includes("   這一類的方向:"+c.improveHint) && p.includes("總共最多 3 條") && p.includes("講出它解決什麼具體困擾")
+      && p.includes("審查期間只提不動手") && p.includes("修之前就先停下來問我") && p.includes("把這一條連同下面的方向與否決清單寫進派工單")
+      && p.includes("6. 檢查這一類的指令本身") && p.includes("上次無可比數字") && p.includes("「這一類指令本身」")
+      && p.includes("【上次單獨審查】"+(c.lastStandaloneAt || "還沒有"))
+      && p.includes("lastReviewedAt 與 lastStandaloneAt 都改成做完那天的日期") && p.includes("「找到 N 條(會弄丟資料 M 條)」")
+      && p.includes("開頭先寫「建議做」或「建議不做」")
+      && (c.declinedIdeas.length ? c.declinedIdeas.every(x=>p.includes("\n   - "+x)) : p.includes("(不要重提;情況變了才可以再提,並說明哪裡變了):目前沒有")));
+  });
+  check("🗓 五類的審查指令都帶改良建議、否決清單、檢查指令本身、單獨審查日", rlPromptBad.length===0, rlPromptBad.map(c=>c.id).join(","));
+  check("🗓 只有功能實測的指令交代「代理沒有瀏覽器,點畫面由統籌者做」",
+    rl.categories.every(c=>E("reviewPrompt("+JSON.stringify(c.id)+",'2026-11-03')").includes("pomo-auditor 沒有瀏覽器")===(c.id==="features")));
+  // 全面體檢:改良建議只在收尾段由統籌者自己列,派代理的段落不叫代理列(CLAUDE.md 第 37 條)
+  const apAll = E("AUDIT_PROMPT"), apCut = apAll.indexOf("【收尾】");
+  check("🗓 體檢指令的改良建議只在收尾段(派代理段不叫代理列)",
+    apCut>0 && !apAll.slice(0,apCut).includes("改良建議") && apAll.slice(apCut).includes("回報另列「改良建議」一區,由統籌者自己整體看完後提——派工單不要叫代理列"));
+  check("🗓 體檢指令的改良建議有上限、方向、否決清單",
+    apAll.includes("最多 3 條") && apAll.includes("兩個功能或兩套機制在做同一件事") && apAll.includes("不要重提;情況變了才可以再提")
+    && (E("AUDIT_DECLINED_IDEAS.length")===0 ? apAll.includes("並說明哪裡變了):目前沒有") : E("AUDIT_DECLINED_IDEAS.every(x=>AUDIT_PROMPT.includes('\\n  - '+x))")));
+  check("🗓 體檢指令交代涵蓋整類才改日期、不動單獨審查日",
+    apAll.includes("該類範圍(scope)裡每一項都看過才算涵蓋") && apAll.includes("lastStandaloneAt 不要動"));
   // 到期判定的四種狀態(用假資料,不依賴今天是幾號)
   w.__savedRL = w.REVIEW_LOG;
   E("window.REVIEW_LOG={soonDays:14,categories:["
@@ -1039,8 +1091,15 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("🗓 沒有到期時卡片說沒有到期", d.getElementById("reviewCard").textContent.includes("目前沒有到期的審查"));
   const rlP = E("reviewPrompt('a','2026-02-01')");
   check("🗓 審查指令帶類別名稱、id、今天日期與更新紀錄的交代",
-    rlP.includes("「甲」審查") && rlP.includes("id 為「a」") && rlP.includes("今天(2026-02-01)") && rlP.includes("review-log.json") && rlP.includes("不要含「全面稽核」"));
+    rlP.includes("「甲」審查") && rlP.includes("id 為「a」") && rlP.includes("複製這份指令時是 2026-02-01") && rlP.includes("review-log.json") && rlP.includes("不要含「全面稽核」"));
   check("🗓 審查指令指名固定代理", rlP.includes("pomo-auditor") && rlP.includes("pomo-verifier"));
+  // 少了新欄位的類別(手加的、或舊格式)也要產得出指令,不可以印出 undefined
+  check("🗓 類別缺新欄位時指令照樣產得出來",
+    rlP.includes("這一類的方向:(這一類還沒寫方向") && rlP.includes("【上次單獨審查】還沒有(這是第一次") && rlP.includes("並說明哪裡變了):目前沒有") && !rlP.includes("undefined"));
+  E("window.REVIEW_LOG={soonDays:14,categories:[{id:'a',name:'甲',scope:'x',intervalDays:3650,lastReviewedAt:'2026-01-01',lastStandaloneAt:'2025-12-01',note:'',improveHint:'往這裡找',declinedIdeas:['2026-01-02 不要做甲','2026-01-03 也不要乙']}]};");
+  const rlP2 = E("reviewPrompt('a','2026-02-01')");
+  check("🗓 否決過的建議逐條列進指令", rlP2.includes("\n   - 2026-01-02 不要做甲\n   - 2026-01-03 也不要乙") && !rlP2.includes("目前沒有"));
+  check("🗓 指令帶上次單獨審查日與改良方向", rlP2.includes("【上次單獨審查】2025-12-01") && rlP2.includes("這一類的方向:往這裡找"));
   check("🗓 不存在的類別不會產生指令", E("reviewPrompt('nope')")==="");
   // 真的走一次複製(沒有 clipboard API 的路徑)
   w.__copiedText=null;

@@ -42,6 +42,17 @@ export function reviewStatuses(data, today = todayYmd()){
   });
 }
 
+// 待提的建議(2026-11-03 比照英文學習;提完、使用者決定之後,連同 CLAUDE.md 第 39 條一起刪掉):
+// 五類都用各自的審查指令單獨做過(lastStandaloneAt 都有日期),或到保底日期還沒到齊,
+// 就該主動提出「全面體檢要不要改成只看兩類之間的縫+快到期的類別」。
+// 保底日期的用意:全面體檢會把涵蓋到的類別日期提前歸零,各類可能永遠等不到到期、永遠不會單獨審查。
+export const PROPOSE_BY = "2027-05-03";
+/** 回傳 { due, notYet }:due=該提了沒;notYet=還沒單獨審過的類別名稱。 */
+export function pendingProposal(categories, today = todayYmd()){
+  const notYet = categories.filter(c => !c.lastStandaloneAt).map(c => c.name);
+  return { due: notYet.length === 0 || today >= PROPOSE_BY, notYet };
+}
+
 export function buildReviewJs(data){
   return "// ⚠️ 這個檔案是「自動產生」的,不要手動改——改了也會被蓋掉。\n"
     + "// 來源:review-log.json(要改日期/週期/說明就改那份);產生者:scripts/gen-audit-info.mjs(跑 npm test 時會自動更新)\n"
