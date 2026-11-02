@@ -1051,6 +1051,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
       && p.includes("【上次單獨審查】"+(c.lastStandaloneAt || "還沒有"))
       && p.includes("lastReviewedAt 與 lastStandaloneAt 都改成做完那天的日期") && p.includes("「找到 N 條(會弄丟資料 M 條)」")
       && p.includes("開頭先寫「建議做」或「建議不做」")
+      && p.includes("只改規則檔或說明文字的修正,只有程式依賴那句話") && p.includes("其餘不硬加")
       && p.includes("線上版(https://zaker353.github.io/pomodoro/)只能看不能寫") && p.includes("絕不在測試環境設定雲端同步、絕不填真的倉庫或金鑰")
       && (c.declinedIdeas.length ? c.declinedIdeas.every(x=>p.includes("\n   - "+x)) : p.includes("(不要重提;情況變了才可以再提,並說明哪裡變了):目前沒有")));
   });
@@ -1065,6 +1066,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("🗓 體檢指令的改良建議有上限、方向、否決清單",
     apAll.includes("最多 3 條") && apAll.includes("兩個功能或兩套機制在做同一件事") && apAll.includes("不要重提;情況變了才可以再提")
     && (E("AUDIT_DECLINED_IDEAS.length")===0 ? apAll.includes("並說明哪裡變了):目前沒有") : E("AUDIT_DECLINED_IDEAS.every(x=>AUDIT_PROMPT.includes('\\n  - '+x))")));
+  check("🗓 體檢指令交代只改規則或說明文字的修正不硬加比對測試(CLAUDE.md 第 12 條)", apAll.includes("只改規則檔或說明文字的修正例外:只有程式依賴那句話") && apAll.includes("其餘不硬加"));
   check("🗓 體檢指令交代「全面稽核」要寫在 commit 標題(計數只看標題)", apAll.includes("commit 的標題(第一行)一定要有「全面稽核」四個字"));
   check("🗓 體檢指令交代涵蓋整類才改日期、不動單獨審查日",
     apAll.includes("該類範圍(scope)裡每一項都看過才算涵蓋") && apAll.includes("lastStandaloneAt 不要動"));
