@@ -399,6 +399,9 @@
     background:#3a4060; color:#fff; padding:12px 20px; border-radius:12px;
     font-size:14px; opacity:0; transition:all .3s; z-index:230; max-width:90%;
     box-shadow:0 4px 20px rgba(0,0,0,.4); text-align:center;
+    /* 收起來時只是變透明、往下滑,其實還蓋在底部分頁列中間:沒有這行,
+       按「統計」那一格會被看不見的提示框吃掉(2026-11-03 Firefox 實測抓到)。提示框只放文字,不需要被點 */
+    pointer-events:none;
   }
   #toast.show{transform:translateX(-50%) translateY(0); opacity:1;}
   /* 存檔失敗警告:比提醒橫幅、午睡畫面都高一層,關掉之前一直留著 */

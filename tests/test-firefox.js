@@ -252,6 +252,23 @@ function startServer(){
     await js("localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); ghRender();");
     check("🦊 假設定已清乾淨", await val("loadGh()===null"));
 
+    /* ---------- 提示框收起來後,不可以擋住底部分頁列(2026-11-03) ---------- */
+    // 提示框收起來只是變透明、往下滑,其實還蓋在分頁列中間;以前沒設成「點得穿」,
+    // 按「統計」那一格會被看不見的提示框吃掉。用一句長的提示讓它蓋到最多格再驗。
+    await js("toast('自動同步已關閉,之後請手動按「上傳備份」(測試用的長提示)');"
+      + " clearTimeout(toastTimer); document.getElementById('toast').classList.remove('show');");
+    await driver.sleep(500);   // 等收起來的動畫(0.3 秒)跑完
+    const navBlockers = await val(`(function(){ var bad=[];
+      document.querySelectorAll('.bottom-nav button').forEach(function(b){
+        var r=b.getBoundingClientRect();
+        [0.5, 0.8].forEach(function(f){
+          var hit=document.elementFromPoint((r.left+r.right)/2, r.top+r.height*f);
+          if(!hit || !b.contains(hit)) bad.push(b.id+' 被 '+(hit?(hit.id||hit.tagName):'null')+' 擋住');
+        });
+      });
+      return bad.length ? bad.join(', ') : 'ok:' + document.querySelectorAll('.bottom-nav button').length; })()`);
+    check("🦊 提示框收起來後,底部分頁列每一格都按得到", navBlockers === "ok:5", navBlockers);
+
     /* ---------- ✨ 統計頁的兩個新區塊:真的畫得出來、真的點得到 ---------- */
     await js(`
       tasks=[{id:'tA',name:'讀多益',done:false,pomos:0,est:0,createdAt:1},

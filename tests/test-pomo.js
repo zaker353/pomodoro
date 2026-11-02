@@ -101,6 +101,10 @@ function makeDom(presetStore){
       // 用真檔而不是寫死假資料,才驗得到「產生出來的格式 App 真的吃得下」。
       try{ window.eval(fs.readFileSync(path.join(__dirname,"..","audit-info.js"),"utf8")); }catch(e){}
       try{ window.eval(fs.readFileSync(path.join(__dirname,"..","review-log.js"),"utf8")); }catch(e){}   // 審查紀錄,同上
+      // 真檔的計數一到門檻,App 開起來 9 秒後會跳「該做全面體檢了」的提醒,插進跑到一半的測試、
+      // 把別的提醒擠掉(2026-11-03 計數剛好到 10,咖啡因那條就紅了)。當成「今天已經提醒過」,
+      // 測試結果才不會跟著真實計數變;要測這個提醒本身,在 presetStore 另外指定 pomo_auditnag。
+      window.localStorage.setItem("pomo_auditnag", daysAgoStr(0));
       if(presetStore) Object.keys(presetStore).forEach(k=>window.localStorage.setItem(k,presetStore[k]));
     }
   });
