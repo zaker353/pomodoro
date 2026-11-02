@@ -248,6 +248,96 @@ function startServer(){
     check("🦊 截圖有拍到雲端備份卡片", shotSize > 20000 && cardInView === true,
       "檔案 " + Math.round(shotSize/1024) + "KB / 卡片在畫面內=" + cardInView);
 
+    /* ---------- 🕘 看以前的備份 → 還原:真的按下去(2026-11-03) ---------- */
+    // 資料被蓋掉時的最後一道安全網。以前只有 jsdom 測到,而它的「還原」鈕 08-09～09-28
+    // 按了沒反應都沒人發現,所以這裡要在真 Firefox 裡真的按。
+    // 🔴 安全:上面已經 ghSetAuto(false) + 假帳號;這裡再把頁面的 fetch 換成假的,
+    //    連 api.github.com 都不會真的連出去(其他網址照常放行),測完換回來。
+    const HIST_WHEN = "2026-10-01T08:30:00Z";
+    await js(`
+      window.__beforeRestore = JSON.parse(JSON.stringify(buildBackupData()));
+      sessions=[{id:'now-s1',d:todayStr(),m:25,t:9}];
+      tasks=[{id:'nowTask',name:'現在的任務',done:false,pomos:0,est:0,createdAt:1000}];
+      tombs=emptyTombs(); activeTask=null; saveData(); renderTasks();
+      window.__oldVersion = {app:'pomodoro-whitenoise', version:4,
+        sessions:[{id:'old-s1',d:'2026-10-01',m:25,t:9},{id:'old-s2',d:'2026-10-01',m:25,t:9},
+                  {id:'old-s3',d:'2026-10-02',m:50,t:14}],
+        tasks:[{id:'oldTask',name:'舊版本的任務',done:false,pomos:3,est:0,createdAt:1000}],
+        favMixes:[], presets:[], tombs:{task:{},fav:{},preset:{},session:{}}};
+      window.__realFetch = window.fetch; window.__ghCalls = [];
+      window.fetch = function(url, opt){
+        const u = String(url);
+        if(!u.startsWith('https://api.github.com/')) return window.__realFetch.apply(this, arguments);
+        window.__ghCalls.push(((opt && opt.method) || 'GET') + ' ' + u);
+        const reply = (obj, status) => Promise.resolve(new Response(JSON.stringify(obj),
+          {status: status || 200, headers: {'Content-Type': 'application/json'}}));
+        if(u.includes('/commits?path=')) return reply([{sha:'sha-old-1',
+          commit:{committer:{date:${JSON.stringify(HIST_WHEN)}}, message:'番茄鐘備份(舊)'}}]);
+        if(u.includes('?ref=sha-old-1')) return reply(window.__oldVersion);
+        return reply({message:'Not Found'}, 404);
+      };
+      window.__confirmMsgs = []; window.__confirmAnswer = false;   // 第一次先按「取消」
+      window.confirm = m => { window.__confirmMsgs.push(String(m)); return window.__confirmAnswer; };
+    `);
+    const whenText = await val("new Date(" + JSON.stringify(HIST_WHEN) + ").toLocaleString('zh-TW')");
+    await clickSafely(By.xpath("//button[contains(., '看以前的備份')]"));
+    const histShown = await driver.wait(async () =>
+      await val("document.getElementById('ghHistory').style.display==='block'"), 5000).catch(() => false);
+    const histText = histShown ? await driver.findElement(By.id("ghHistory")).getText() : "";
+    check("🦊 按「看以前的備份」真的列出版本清單", histShown && histText.includes(whenText) && histText.includes("還原"),
+      histShown ? histText.replace(/\n+/g, " ").slice(-40) : "清單沒出現,狀態列:" + await driver.findElement(By.id("ghStatus")).getText());
+    if(histShown){
+      check("🦊 版本清單在窄視窗沒有擠出框",
+        await val("(function(){var e=document.getElementById('ghHistory');return e.scrollWidth<=e.clientWidth+2;})()"));
+      await js("document.getElementById('ghHistory').scrollIntoView({block:'center'})");
+      await driver.sleep(300);
+      fs.writeFileSync(path.join(shotDir, "雲端以前的備份-清單.png"), Buffer.from(await driver.takeScreenshot(), "base64"));
+
+      const restoreBtn = By.xpath("//div[@id='ghHistory']//button[text()='還原']");
+      // ① 按「還原」但在確認視窗按取消:資料一筆都不能動
+      await clickSafely(restoreBtn);
+      await driver.wait(async () => (await driver.findElement(By.id("ghStatus")).getText()) === "已取消", 3000).catch(() => {});
+      check("🦊 還原時按「取消」,資料原封不動",
+        await val("sessions.length===1 && sessions[0].id==='now-s1' && tasks.length===1 && tasks[0].id==='nowTask'"),
+        "sessions=" + await val("JSON.stringify(sessions.map(x=>x.id))") + " / 狀態列:" + await driver.findElement(By.id("ghStatus")).getText());
+
+      // ② 再按一次「還原」,這次確認
+      await js("window.__confirmAnswer = true;");
+      await clickSafely(restoreBtn);
+      const statusOk = await driver.wait(async () =>
+        (await driver.findElement(By.id("ghStatus")).getText()).includes("已還原成"), 5000).catch(() => false);
+      const ghMsg = await driver.findElement(By.id("ghStatus")).getText();
+      check("🦊 按「還原」真的換成那個版本的專注紀錄(長得一樣的兩筆都在)",
+        await val("JSON.stringify(sessions.map(x=>x.id))==='[\"old-s1\",\"old-s2\",\"old-s3\"]'"),
+        "sessions=" + await val("JSON.stringify(sessions.map(x=>x.id))"));
+      check("🦊 任務也換成那個版本的,現在的被取代",
+        await val("tasks.length===1 && tasks[0].id==='oldTask' && tasks[0].pomos===3")
+        && (await val("document.getElementById('taskList').textContent")).includes("舊版本的任務"),
+        "tasks=" + await val("JSON.stringify(tasks.map(t=>t.name))"));
+      check("🦊 還原的資料真的存進瀏覽器(重新整理也還在)",
+        await val("JSON.stringify(JSON.parse(localStorage.getItem('pomo_sessions')).map(x=>x.id))==='[\"old-s1\",\"old-s2\",\"old-s3\"]'"));
+      const lastConfirm = await val("window.__confirmMsgs[window.__confirmMsgs.length-1]||''");
+      check("🦊 按下去前先講清楚會換成什麼",
+        await val("window.__confirmMsgs.length")===2 && lastConfirm.includes(whenText)
+        && lastConfirm.includes("3 筆專注紀錄、1 個任務") && lastConfirm.includes("目前的資料(1 筆)"),
+        lastConfirm.replace(/\n+/g, " ").slice(0,90));
+      check("🦊 還原完狀態列說成功、清單收起來",
+        statusOk && ghMsg.startsWith("✅ 已還原成 " + whenText + " 的版本")
+        && await val("document.getElementById('ghHistory').style.display==='none'"),
+        ghMsg.slice(0,70));
+      const ghCalls = JSON.parse(await val("JSON.stringify(window.__ghCalls)"));
+      check("🦊 整個過程只有讀、沒有上傳(不會順手蓋掉雲端)",
+        ghCalls.length >= 3 && ghCalls.every(c => c.startsWith("GET "))
+        && ghCalls.some(c => c.includes("/commits?path=pomodoro-backup.json"))
+        && ghCalls.some(c => c.includes("/contents/pomodoro-backup.json?ref=sha-old-1")),
+        ghCalls.map(c => c.replace("https://api.github.com/repos/firefox-test-not-a-real-user/firefox-test-not-a-real-repo", "…")).join(" | "));
+      await js("document.getElementById('ghCard').scrollIntoView({block:'center'})");
+      await driver.sleep(300);
+      fs.writeFileSync(path.join(shotDir, "雲端以前的備份-還原後.png"), Buffer.from(await driver.takeScreenshot(), "base64"));
+    }
+    // 換回真的 fetch、把資料還原成這段開始前的樣子
+    await js("window.fetch = window.__realFetch; window.confirm = () => true; ghHideHistory(); applyImport(window.__beforeRestore);");
+
     // 假設定用完就清掉,不要留在測試設定檔裡
     await js("localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); ghRender();");
     check("🦊 假設定已清乾淨", await val("loadGh()===null"));
