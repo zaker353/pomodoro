@@ -55,7 +55,9 @@
       "lastStandaloneAt": null,
       "note": "全面稽核(2026-11-03,只改 lastReviewedAt):FILES 31 項對磁碟與 index.html 引用、圖示尺寸與 manifest、線上 sw.js/index.html/audit-info.js/review-log.js 與本機一致(curl);真 Firefox 用 serve.mjs 實測:清快取只刪 pomo-(英文學習/塔羅的留著)、伺服器關掉後首頁/index.html/音檔/manifest/圖示都從快取拿得到;五個 .bat 都實際跑過;npm outdated:jsdom 30、geckodriver 8 是大版、selenium 4.51 小版,npm audit 2 個高風險都在 jsdom 的相依(只用在測試、不連外)→不升;修:sw.js 連 GitHub 的回應也快取、錯誤回應也存(改成只管自己網站的 GET、只存成功的),並補 sw.js 行為測試(以前沒有任何測試守「只刪 pomo-」)",
       "improveHint": "部署與離線流程有沒有能更自動、更不容易漏步驟的地方(例:sw.js 的版本號靠手動 +1);測試工具升級只在有具體好處(修 bug、安全性)時才提",
-      "declinedIdeas": []
+      "declinedIdeas": [
+        "2026-11-03 不升 jsdom 30／geckodriver 8，也不為 npm audit 在 jsdom 相依套件（undici 等）的警告升級：只用在本機跑測試、不連外、不進 App，大版升級反而可能弄壞兩套測試"
+      ]
     }
   ]
 }
