@@ -3367,8 +3367,19 @@ function ghUpdateStatusLine(){
   const el=$("ghAutoStatus"); if(!el) return;
   const s=ghLastStatus();
   if(!s){ el.textContent=""; return; }
-  const t=new Date(s.at).toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"});
-  el.textContent="上次自動同步:"+t+" "+(s.action==="upload"?"上傳":"下載")+(s.ok?" ✅":" ❌ "+(s.msg||""));
+  el.textContent="上次自動同步:"+ghWhenText(s.at)+" "+(s.action==="upload"?"上傳":"下載")+(s.ok?" ✅":" ❌ "+(s.msg||""));
+}
+// 不是今天就把日期也寫出來:以前只有「時:分」,三天前的「14:30 上傳 ✅」看起來像今天、以為一直有在同步(2026-11-22 功能實測的改良建議)
+// 今天 → 14:30;昨天 → 昨天 14:30;更早 → 11/20 14:30(3 天前);不是今年 → 2025/12/30 14:30(328 天前)
+function ghWhenText(at){
+  const d=new Date(at);
+  const t=d.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"});
+  const ymd=ymdOf(d), today=todayStr();
+  if(ymd===today) return t;
+  if(ymd===todayStr(-1)) return "昨天 "+t;
+  const days=Math.round((reviewYmdToUtc(today)-reviewYmdToUtc(ymd))/86400000);   // 隔幾個日曆天(不受夏令時間影響)
+  const date=(d.getFullYear()===new Date().getFullYear() ? "" : d.getFullYear()+"/")+(d.getMonth()+1)+"/"+d.getDate();
+  return date+" "+t+(days>1 ? "("+days+" 天前)" : "");
 }
 let ghDirty=false, ghAutoBusy=false, ghUploadTimer=null;
 // 這一輪(這次開 App)有沒有成功跟雲端對過帳。沒有的話自動上傳前要先對帳,對不了就不傳,見 ghAutoUpload()。

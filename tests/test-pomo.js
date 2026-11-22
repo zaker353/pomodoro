@@ -1878,6 +1878,26 @@ const LAST_WEEK_DAY = daysAgoStr(7);
     E("switchMode('focus',false);");
     w.confirm = () => true;
   }
+
+  // 11.9 ☁️ 雲端「上次自動同步」不是今天就寫出日期(2026-11-22 功能實測改良建議 C:三天前的「14:30 上傳 ✅」看起來像今天)
+  // 用假帳號、關掉自動同步才畫出設定好的畫面;fetch 本來就是假的,不會連出去
+  {
+    E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'T'})); ghSetAuto(false); ghRender();");
+    const agoAt = n => E("(()=>{ const x=new Date(); x.setDate(x.getDate()-("+n+")); x.setHours(14,30,0,0); return x.getTime(); })()");
+    const lineAt = (at, ok) => { E("ghRecordStatus({at:"+at+", ok:"+(ok!==false)+", action:'upload', msg:'壞了'})"); return d.getElementById("ghAutoStatus").textContent; };
+    const hm = at => new Date(at).toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"});
+    const md = at => { const x=new Date(at); return (x.getMonth()+1)+"/"+x.getDate(); };
+    let at = agoAt(0), line = lineAt(at);
+    check("☁️ 今天同步的:只寫時:分(不多寫日期)", line==="上次自動同步:"+hm(at)+" 上傳 ✅", line);
+    at = agoAt(1); line = lineAt(at);
+    check("☁️ 昨天同步的:寫「昨天」", line==="上次自動同步:昨天 "+hm(at)+" 上傳 ✅", line);
+    at = agoAt(3); line = lineAt(at);
+    const y3 = new Date(at).getFullYear()===new Date().getFullYear() ? "" : new Date(at).getFullYear()+"/";
+    check("☁️ 三天前同步的:寫出月/日和幾天前", line==="上次自動同步:"+y3+md(at)+" "+hm(at)+"(3 天前) 上傳 ✅", line);
+    at = agoAt(400); line = lineAt(at, false);
+    check("☁️ 不是今年的:連年份一起寫,失敗的原因照樣顯示", line==="上次自動同步:"+new Date(at).getFullYear()+"/"+md(at)+" "+hm(at)+"(400 天前) 上傳 ❌ 壞了", line);
+    E("localStorage.removeItem('pomo_ghsync_status'); localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); clearTimeout(ghUploadTimer); ghDirty=false; ghRender();");
+  }
   console.log(results.join("\n"));
   console.log("\n總結:"+(results.length-failed)+"/"+results.length+" 通過"+(failed?"、"+failed+" 個失敗":""));
   process.exit(failed?1:0);
