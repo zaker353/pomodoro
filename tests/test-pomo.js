@@ -1688,6 +1688,141 @@ const LAST_WEEK_DAY = daysAgoStr(7);
     w.Storage.prototype.setItem = realSet;
     E("settings.dailyGoal=8; sessions=[]; tasks=[]; saveData(); renderStats(); hideSaveFail(); saveFailHiddenAt=0;");
   }
+
+  // 11.7 🍅 2026-11-22 功能實測修掉的問題(每一條都故意改壞驗過會紅)
+  {
+    w.confirm = () => true;
+    E("closeMood(); settings.strict=false; settings.autoStartWork=false; settings.autoStartBreak=false; settings.microEx=false; settings.countUp=false;"
+      + " sessions=[]; tasks=[]; activeTask=null; routine=null; countUpOverride=false; saveData(); switchMode('focus',false);");
+    const timerJson = o => "localStorage.setItem('pomo_timer', JSON.stringify(Object.assign({mode:'focus',running:true,endAt:0,remainMs:0,cuActive:false,cuStart:0,cuAccum:0,routine:null,phaseStarted:true,countUpOverride:false,phaseMin:25,pendingCountUp:null}, " + o + ")));";
+    // ① 關掉 App 期間走完的一輪:記在真正結束的那天那個小時,不是打開 App 的那一刻
+    E("var yd=new Date(); yd.setDate(yd.getDate()-1); yd.setHours(23,30,0,0); window.__yEnd=yd.getTime();");
+    E(timerJson("{endAt:window.__yEnd}") + " restoreTimerState(); closeMood();");
+    check("🍅 關著 App 期間走完的一輪,記在真正結束的前一天 23 點(不是打開 App 的那一刻)",
+      E("sessions.length")===1 && E("sessions[0].d")===daysAgoStr(1) && E("sessions[0].t")===23, E("JSON.stringify(sessions[0])"));
+    // ② 結束很久之後才打開 App:不自己開始下一輪(嚴格模式下會收不掉);剛結束幾秒的重新整理照常接續
+    E("settings.autoStartWork=true; settings.strict=true; saveData();");
+    E(timerJson("{mode:'short',phaseMin:5,endAt:Date.now()-10*3600000}") + " restoreTimerState();");
+    check("🍅 休息在 App 關著時結束、10 小時後才打開:不會自己開始一輪專注", E("mode")==="focus" && E("running")===false && E("phaseStarted")===false,
+      "mode="+E("mode")+" running="+E("running"));
+    E(timerJson("{mode:'short',phaseMin:5,endAt:Date.now()-5000}") + " restoreTimerState();");
+    check("🍅 剛結束幾秒就重新整理:「休息結束自動開始專注」照常接上", E("mode")==="focus" && E("running")===true);
+    E("settings.autoStartWork=false; settings.strict=false; saveData(); switchMode('focus',false);");
+    // ①② 沒重新整理、網頁被凍住(手機鎖屏)3 小時後 tick 才發現走完:記在 3 小時前那一刻,也不自動開始休息(驗收抓到原本只測了重新整理那條路)
+    E("settings.autoStartBreak=true; saveData(); sessions=[]; toggleTimer(); window.__fz=Date.now()-3*3600000; endAt=window.__fz; tick(); closeMood();");
+    const fz = new Date(E("window.__fz"));
+    check("🍅 網頁被凍住、很晚才發現走完:記在真正結束的那個小時,也不自動開始休息",
+      E("sessions.length")===1 && E("sessions[0].t")===fz.getHours() && E("sessions[0].d")===E("ymdOf(new Date(window.__fz))") && E("mode")!=="focus" && E("running")===false,
+      E("JSON.stringify(sessions[0])")+" mode="+E("mode")+" running="+E("running"));
+    E("switchMode('focus',false); toggleTimer(); endAt=Date.now()-3000; tick(); closeMood();");
+    check("🍅 剛走完就發現:「專注結束自動開始休息」照常接上", E("mode")!=="focus" && E("running")===true);
+    E("settings.autoStartBreak=false; saveData(); sessions=[]; saveData(); switchMode('focus',false);");
+    // ③ 倒數暫停後按「跳過」要先問(暫停時 running 是 false,以前不問就丟掉這一輪)
+    let asked = 0; w.confirm = () => { asked++; return false; };
+    E("toggleTimer(); toggleTimer(); skipPhase();");
+    check("🍅 倒數暫停後按「跳過」會先問,按取消這一輪還在", asked===1 && E("mode")==="focus" && E("phaseStarted")===true, "問了 "+asked+" 次,mode="+E("mode"));
+    w.confirm = () => true;
+    // ⑫ 暫停中看得出是暫停:按鈕寫「繼續」、上面寫暫停中;重新整理後也一樣
+    const pausedOk = () => d.getElementById("startBtn").textContent==="繼續" && d.getElementById("phaseLabel").textContent.includes("暫停中");
+    check("🍅 倒數暫停中按鈕寫「繼續」、上面寫暫停中(以前還寫「專注中…加油!」和「開始」)", pausedOk(),
+      d.getElementById("startBtn").textContent+" / "+d.getElementById("phaseLabel").textContent);
+    E("restoreTimerState();");
+    check("🍅 暫停中重新整理,一樣看得出是暫停(以前變成「準備開始專注」)", pausedOk(), d.getElementById("phaseLabel").textContent);
+    E("resetTimer();");
+    check("🍅 重設後按鈕回到「開始」", d.getElementById("startBtn").textContent==="開始");
+    // ④ 一輪做到一半把任務勾完成,這一輪照樣記在它身上
+    const selTxt = () => { const s=d.getElementById("taskSelect"); return s.selectedIndex>=0 ? s.options[s.selectedIndex].textContent : ""; };
+    E("tasks=[{id:'tk1',name:'寫報告',done:false,pomos:0,createdAt:1},{id:'tk2',name:'讀英文',done:false,pomos:0,createdAt:2}]; activeTask='tk1'; saveData(); renderTasks();");
+    E("toggleTimer(); completeTask('tk1');");
+    check("🍅 中途勾完成後,下拉選單仍顯示這一輪記在哪個任務", selTxt().includes("寫報告"), selTxt());
+    E("finishPhase(); closeMood();");
+    check("🍅 一輪做到一半把任務勾完成,這一輪照樣記在它身上(番茄+1、紀錄有任務)",
+      E("sessions[sessions.length-1].task")==="tk1" && E("tasks.find(t=>t.id==='tk1').pomos")===1, E("JSON.stringify(sessions[sessions.length-1])"));
+    check("🍅 這一輪結束後,勾完成的任務就不再出現在下拉選單", !d.getElementById("taskSelect").textContent.includes("寫報告"));
+    E("switchMode('focus',false); activeTask='tk2'; saveData(); toggleTimer(); completeTask('tk2');"
+      + " localStorage.setItem('pomo_timer', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('pomo_timer')), {endAt:Date.now()-1000}))); restoreTimerState(); closeMood();");
+    check("🍅 中途勾完成、重新整理後才走完,也記在那個任務上", E("sessions[sessions.length-1].task")==="tk2");
+    E("reopenTask('tk1'); switchMode('focus',false); activeTask=null; saveData(); toggleTimer(); pickTask('tk1'); finishPhase(); closeMood();");
+    check("🍅 這一輪中途在下拉選單改選任務,記在新選的那個", E("sessions[sessions.length-1].task")==="tk1");
+    // 正計時也一樣:開始時定下任務,中途勾完成、按「完成」照樣記在它身上
+    E("switchMode('focus',false); reopenTask('tk2'); activeTask='tk2'; settings.countUp=true; saveData(); switchMode('focus',false);"
+      + " toggleTimer(); completeTask('tk2'); cuStart=Date.now()-30*60000; finishCountUp(); closeMood(); settings.countUp=false; saveData(); switchMode('focus',false);");
+    check("🍅 正計時中途勾完成,按「完成」照樣記在那個任務上", E("sessions[sessions.length-1].task")==="tk2" && E("sessions[sessions.length-1].m")===30,
+      E("JSON.stringify(sessions[sessions.length-1])"));
+    // 別台把目前任務勾完成、合併進來(activeTask 還指著它):沒在計時時下拉不列已完成的,下一輪也不記到它身上
+    E("reopenTask('tk2'); activeTask='tk2'; saveData(); tasks.find(t=>t.id==='tk2').done=true; renderTasks();");
+    check("🍅 目前任務被別台勾完成:沒在計時時下拉選單不列出已完成的任務", !d.getElementById("taskSelect").textContent.includes("讀英文"), selTxt());
+    E("toggleTimer(); finishPhase(); closeMood();");
+    check("🍅 目前任務被別台勾完成:下一輪不記到看不見的已完成任務上", !E("sessions[sessions.length-1].task"), E("JSON.stringify(sessions[sessions.length-1])"));
+    E("switchMode('focus',false);");
+    // ⑦ 有今日待辦、目前任務不在其中:下拉選單也要列出目前任務並選著它(以前寫「不指定」,番茄卻記在它身上)
+    E("switchMode('focus',false); reopenTask('tk2'); tasks.forEach(t=>t.todayDate=null); activeTask='tk1'; saveData(); toggleToday('tk2');");
+    check("🍅 有今日待辦時,目前任務不在其中也列在下拉選單、而且選著它", selTxt().includes("寫報告"), selTxt());
+    // ⑤ 達成今日目標、慣例全部完成的提示,不可以被「完成一輪專注」蓋掉
+    E("activeTask=null; tasks=[]; saveData(); renderTasks(); goalCelebrated=null; localStorage.removeItem('pomo_goalfired');"
+      + " settings.dailyGoal=sessions.filter(s=>s.d===todayStr()).length+1; saveData(); toggleTimer(); finishPhase(); closeMood();");
+    check("🍅 達成今日目標的慶祝沒有被「完成一輪」蓋掉", d.getElementById("toast").textContent.includes("達成今日目標"), d.getElementById("toast").textContent);
+    E("presets.push({id:'pR',name:'測慣例',work:25,short:5,rounds:1}); applyPreset(presets.length-1); finishPhase(); closeMood(); presets.pop(); renderPresets(); settings.dailyGoal=8; saveData();");
+    check("🍅 慣例跑完的「全部完成」看得到(沒被「完成一輪」蓋掉)", d.getElementById("toast").textContent.includes("全部完成"), d.getElementById("toast").textContent);
+    E("switchMode('focus',false);");
+    // ⑥ 按著 Ctrl/Alt/Cmd 是瀏覽器的快捷鍵,App 不搶
+    d.dispatchEvent(new w.KeyboardEvent("keydown", {key:"2", ctrlKey:true, bubbles:true}));
+    d.dispatchEvent(new w.KeyboardEvent("keydown", {key:"f", ctrlKey:true, bubbles:true}));
+    check("🍅 Ctrl+2、Ctrl+F 是瀏覽器的快捷鍵,App 不切模式、不開全螢幕時鐘", E("mode")==="focus" && !d.getElementById("fsClock").classList.contains("open"),
+      "mode="+E("mode"));
+    d.dispatchEvent(new w.KeyboardEvent("keydown", {key:"2", bubbles:true}));
+    check("🍅 不按 Ctrl 的 2 照樣切到短休息", E("mode")==="short");
+    E("closeFsClock(); switchMode('focus',false);");
+    // ⑧ 最近的專注紀錄:同一天依時間排、超過 40 筆按「再顯示」看得到更早的(記錯的都刪得掉)
+    E("sessions=[]; for(let i=0;i<45;i++) sessions.push({id:'L'+i,d:todayStr(-(50-i)),m:25,t:10});"
+      + " sessions.push({id:'late',d:todayStr(),m:25,t:22}); sessions.push({id:'early',d:todayStr(),m:25,t:8}); saveData(); sessionListShow=40; renderSessionList();");
+    const rows = () => [...d.querySelectorAll("#sessionList button")].map(b=>b.getAttribute("onclick")||"").filter(s=>s.startsWith("deleteSession"));
+    check("🍅 最近的專注紀錄同一天依時間排(合併別台後陣列順序不是時間順序)", rows()[0]==='deleteSession("late")' && rows()[1]==='deleteSession("early")', rows().slice(0,2).join());
+    check("🍅 一次列 40 筆,下面有「再顯示」", rows().length===40 && !!d.getElementById("moreSessionsBtn"), rows().length+" 筆");
+    d.getElementById("moreSessionsBtn").click();
+    check("🍅 按「再顯示」更早的也列出來、刪得掉", rows().length===47 && rows().includes('deleteSession("L0")') && !d.getElementById("moreSessionsBtn"), rows().length+" 筆");
+    // ⑭ 沒有小時的舊紀錄(2026-07 以前的備份)不顯示 undefined
+    E("sessions.push({id:'noT',d:todayStr(-100),m:25}); saveData(); sessionListShow=200; renderSessionList();");
+    let cmsg = ""; w.confirm = m => { cmsg = m; return false; };
+    E("deleteSession('noT');");
+    w.confirm = () => true;
+    check("🍅 沒有小時的舊紀錄,清單與刪除確認框都不顯示「undefined」",
+      d.getElementById("sessionList").textContent.includes(daysAgoStr(100)) && !d.getElementById("sessionList").textContent.includes("undefined") && cmsg.length>0 && !cmsg.includes("undefined"),
+      cmsg.split("\n")[1]);
+    E("sessions=[]; saveData(); sessionListShow=40; renderSessionList(); renderStats();");
+    // ⑮ 常用組合的名稱要跳脫
+    E("favMixes=[{id:'fx',name:'讀書<i>專用',mix:{rain:50},createdAt:1}]; renderFavs();");
+    check("🍅 常用組合名稱有 < 也照原樣顯示(不被當成網頁標籤)", d.getElementById("favRow").textContent.includes("讀書<i>專用") && !d.querySelector("#favRow i"),
+      d.getElementById("favRow").textContent);
+    E("favMixes=[]; saveData(); renderFavs();");
+    // ⑨ 睡眠定時改選「關閉」要取消排好的淡出(jsdom 的假音量旋鈕記下有沒有被取消;真的淡出由統籌者在真瀏覽器驗過)
+    E("ensureAudioCtx(); window.__csv=0; masterGain.gain.cancelScheduledValues=function(){ window.__csv++; }; setSleepTimer('15'); window.__csv=0; setSleepTimer('0');");
+    check("🍅 睡眠定時改選「關閉」會取消排好的淡出(不然淡出中改選會淡到無聲)", E("window.__csv")>=1, E("window.__csv")+" 次");
+    E("delete masterGain.gain.cancelScheduledValues;");
+    // ⑯ 別台開了嚴格模式、合併進來:這一輪的「跳過」「重設」馬上藏起來
+    E("switchMode('focus',false); toggleTimer();"
+      + " mergeBackup({app:'pomodoro-whitenoise',version:4,settings:Object.assign({},settings,{strict:true}),settingsAt:settingsAt+100000,sessions:[],tasks:[],tombs:{}});");
+    check("🍅 別台開了嚴格模式、合併進來,這一輪的「跳過」「重設」馬上藏起來",
+      E("settings.strict")===true && d.getElementById("skipBtn").style.display==="none" && d.getElementById("resetBtn").style.display==="none",
+      "skip="+d.getElementById("skipBtn").style.display);
+    E("settings.strict=false; saveData(); switchMode('focus',false);");
+    // ⑬ 審查卡複製失敗時,叫他說的是那一類審查,不是「全面體檢」(照做會把體檢計數歸零)
+    E("navigator.clipboard=undefined; window.__realExec=document.execCommand; document.execCommand=function(){ return false; };");
+    const rc = E("reviewLog().categories.find(c=>c.id==='features').name");
+    E("copyReviewPrompt('features');");
+    check("🍅 審查卡複製失敗時,叫他說的是那一類審查、不是「全面體檢」",
+      d.getElementById("toast").textContent.includes("『"+rc+"』") && !d.getElementById("toast").textContent.includes("全面體檢"), d.getElementById("toast").textContent);
+    E("document.execCommand=window.__realExec;");
+    // ⑪ 一輪進行中按「下載並覆蓋」「還原以前的版本」,確認框要講這一輪會重設(09-28 只改了匯入那一邊)
+    E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'T'})); ghSetAuto(false); ghRender(); sessions=[{id:'gr1',d:'2026-06-01',m:25,t:9}]; saveData(); ghDoUpload();"); await sleep(200);
+    const msgs = []; w.confirm = m => { msgs.push(m); return false; };
+    E("switchMode('focus',false); toggleTimer(); ghDoOverwrite();"); await sleep(250);
+    E("ghRestore('sha0','某個時間');"); await sleep(250);
+    w.confirm = () => true;
+    check("🍅 一輪進行中按「下載並覆蓋」「還原以前的版本」,確認框都講這一輪會重設",
+      msgs.length===2 && msgs.every(m=>m.includes("進行中的這一輪計時也會重設")), msgs.length+" 個確認框");
+    E("resetTimer(); ghHideHistory(); localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); sessions=[]; saveData(); clearTimeout(ghUploadTimer); ghDirty=false; ghRender(); settings.microEx=true; saveData();");
+  }
   console.log(results.join("\n"));
   console.log("\n總結:"+(results.length-failed)+"/"+results.length+" 通過"+(failed?"、"+failed+" 個失敗":""));
   process.exit(failed?1:0);

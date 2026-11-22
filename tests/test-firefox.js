@@ -522,6 +522,22 @@ function startServer(){
     check("🦊 按「知道了」警告真的收起來", !(await failBar.isDisplayed()));
     await js("Storage.prototype.setItem=window.__realSetItem; tasks=tasks.filter(t=>t.name!=='存不進去的任務'); saveData(); renderTasks();");
 
+    /* ---------- 提醒橫幅收起來後要整條離開畫面(2026-11-22 功能實測) ---------- */
+    // 以前收起來是固定推到 top:-120px:手機上長的提醒(體檢提醒有兩顆鈕)高約 177px,
+    // 收起後下半截一直露在頁首、還擋住那裡的點擊。無頭 Firefox 最窄只到 500 左右,
+    // 所以用一句特別長的提醒把橫幅撐到 120px 以上再驗(真正 375 寬由統籌者用手機尺寸看過)。
+    await js("fireRem('🔍','" + "這是一則很長很長的測試提醒,".repeat(8) + "','去看看',function(){});");
+    await driver.sleep(700);
+    const remShownH = await val("Math.round(document.getElementById('remBanner').getBoundingClientRect().height)");
+    await js("hideRem(); remQueue=[];");
+    await driver.sleep(800);   // 等收起來的動畫(0.4 秒)跑完
+    const remLeft = await val(`(function(){ var b=document.getElementById('remBanner'), r=b.getBoundingClientRect();
+      var hit=document.elementFromPoint(window.innerWidth/2, 6);
+      return {bottom:Math.round(r.bottom), vis:getComputedStyle(b).visibility, covered:!!(hit && b.contains(hit))}; })()`);
+    check("🦊 長的提醒收起來後整條離開畫面、不擋頁首的點擊",
+      remShownH > 120 && remLeft.bottom <= 0 && !remLeft.covered,
+      "橫幅高 " + remShownH + "px,收起後底邊 " + remLeft.bottom + "px、" + remLeft.vis + (remLeft.covered ? "、頁首被擋住" : ""));
+
     /* ---------- 順便拍一張任務頁,確認整體沒壞 ---------- */
     await driver.manage().window().setRect({width:1100, height:900});
     await driver.findElement(By.id("nav-tasks")).click();

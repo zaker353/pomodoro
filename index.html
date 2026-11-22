@@ -311,14 +311,17 @@
   .mood-btns button .ml{font-size:12px; color:var(--dim); margin-top:4px;}
 
   /* 提醒橫幅 */
+  /* 收起來時往上推「自己的高度+40px」並 visibility:hidden。以前固定推到 top:-120px,
+     手機上長的提醒(體檢提醒有兩顆鈕)高約 177px,收起後下半截一直露在頁首、還擋住那裡的點擊(2026-11-22 功能實測) */
   #remBanner{
-    position:fixed; top:-120px; left:50%; transform:translateX(-50%); z-index:220;
+    position:fixed; top:14px; left:50%; transform:translate(-50%, calc(-100% - 40px)); z-index:220;
     background:#2c3a5e; border:1px solid var(--line); border-radius:16px;
     padding:14px 16px; width:calc(100% - 32px); max-width:440px;
-    display:flex; align-items:center; gap:12px; transition:top .4s;
+    display:flex; align-items:center; gap:12px;
+    visibility:hidden; transition:transform .4s, visibility 0s linear .4s;
     box-shadow:0 6px 24px rgba(0,0,0,.5);
   }
-  #remBanner.show{top:14px;}
+  #remBanner.show{transform:translate(-50%, 0); visibility:visible; transition:transform .4s, visibility 0s;}
   #remBanner .ri{font-size:26px;}
   #remBanner .rt{flex:1; font-size:14px; line-height:1.5;}
   #remBanner button{
@@ -501,7 +504,7 @@
         <input type="number" id="taskEst" placeholder="預🍅" min="1" max="50" style="flex:0 0 74px" title="預估要幾顆番茄(可不填)">
         <button onclick="addTask()">新增</button>
       </div>
-      <div class="hint-line">💡 「預🍅」=預估這件事要幾顆番茄(可不填)。做完對照實際花幾顆,估得越準代表你越了解自己。按 ✏️ 可以改任務名字(不會弄掉已累積的番茄數)。點任務左邊的圓圈=設為目前任務;點 ☀️ =排進「今日待辦」,計時頁就只會顯示今天要做的。</div>
+      <div class="hint-line">💡 「預🍅」=預估這件事要幾顆番茄(可不填)。做完對照實際花幾顆,估得越準代表你越了解自己。按 ✏️ 可以改任務名字(不會弄掉已累積的番茄數)。點任務左邊的圓圈=設為目前任務;點 ☀️ =排進「今日待辦」,計時頁就只會顯示今天要做的(目前任務也會留著)。</div>
       <div id="taskList"></div>
     </section>
     <section>
@@ -655,9 +658,9 @@
         <div class="set-row"><label>結束鈴聲重複次數<span class="hint">怕沒聽到可以調多次(1~5)</span></label><input type="number" id="setChime" min="1" max="5" onchange="saveSettings()"></div>
         <div class="set-row"><label>嚴格模式<span class="hint">這一輪結束前藏起「跳過」「重設」,暫停中也不能換模式、套情境、切正計時。可以暫停(有急事要能停),但不能靠「暫停→再繞路」偷懶</span></label>
           <div class="switch"><input type="checkbox" id="setStrict" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setStrict').click()"></div></div></div>
-        <div class="set-row"><label>休息結束自動開始專注</label>
+        <div class="set-row"><label>休息結束自動開始專注<span class="hint">結束超過 5 分鐘才發現的(App 關著、手機鎖屏太久)不會自己開始,一鍵慣例也一樣,按「開始」再接著做</span></label>
           <div class="switch"><input type="checkbox" id="setAutoWork" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoWork').click()"></div></div></div>
-        <div class="set-row"><label>專注結束自動開始休息</label>
+        <div class="set-row"><label>專注結束自動開始休息<span class="hint">同上,結束超過 5 分鐘才發現的不會自己開始</span></label>
           <div class="switch"><input type="checkbox" id="setAutoBreak" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setAutoBreak').click()"></div></div></div>
         <div class="set-row"><label>計時中螢幕保持常亮<span class="hint">避免手機自動熄滅螢幕讓計時中斷</span></label>
           <div class="switch"><input type="checkbox" id="setWake" onchange="saveSettings()"><div class="track" onclick="document.getElementById('setWake').click()"></div></div></div>
@@ -704,7 +707,7 @@
           ・白噪音混音器:24 種真實環境音,可疊加、各自調音量、存常用組合;睡眠定時會慢慢變小聲自動停。<br><br>
           <b>✅ 任務頁</b><br>
           ・新增任務時可填「預估幾顆番茄」,做完對照實際,練習估算能力。<br>
-          ・☀️ 排進今日待辦:計時頁就只顯示今天要做的。<br>
+          ・☀️ 排進今日待辦:計時頁就只顯示今天要做的(目前選著的任務也會留著,番茄記在誰身上一看就知道)。<br>
           ・完成/復原/刪除,按 ✏️ 改名字,每個任務顯示累積番茄數。<br><br>
           <b>📊 統計頁</b><br>
           ・今日/最近7天/累計/連續天數、20 週熱力圖、14 天長條圖。<br>
@@ -1026,13 +1029,27 @@
 "use strict";
 /* ============ 小工具 ============ */
 const $ = id => document.getElementById(id);
+function ymdOf(d){
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
 function todayStr(offset=0){
   const d = new Date(); d.setDate(d.getDate()+offset);
-  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  return ymdOf(d);
 }
 // 一輪專注最多能記幾分鐘。正計時模式沒有自然結束點,關著頁面隔天回來
 // 會把中間全部算成專注,所以要有上限擋住假紀錄。
 const MAX_SESSION_MIN = 240;
+// 一輪結束超過這麼久才被發現(App 關著、手機鎖屏把網頁凍住),就不自動開始下一輪。
+// 否則晚上關掉 App、隔天早上打開就自己跑起一輪專注,嚴格模式下還收不掉、放著就記成假紀錄(2026-11-22 功能實測)。
+// 重新整理這種幾秒內的不受影響,「自動開始」照常接續。
+// 留 5 分鐘而不是更短:分頁放在背景時瀏覽器會把計時放慢(Chrome 最慢一分鐘才跑一次),晚一點發現的不能被當成「關著 App」。
+const AUTO_START_GRACE_MS = 5*60000;
+// 這一輪要記在哪個任務上:按「開始」時定下,這一輪中途在下拉選單改選也跟著換,
+// 但把任務勾「完成」不會清掉它——否則做完先打勾,這一輪就不算在那個任務上(2026-11-22 功能實測)。
+let phaseTask=null;
+// 開始一輪時拿來當這一輪任務的「目前任務」:已完成的不算(別台把它勾完成、合併進來時 activeTask 還指著它,
+// 不擋的話之後每一輪都記到看不見的已完成任務上;驗收抓到)
+function liveActiveTask(){ const t=tasks.find(x=>x.id===activeTask && !x.done); return t ? t.id : null; }
 // 「這一輪專注度如何?」要打分在哪一筆紀錄上(用 id 記,不能靠陣列位置)
 let moodTargetId=null;
 // 這一輪「已經開始、還沒結束」。嚴格模式靠它判斷要不要藏偷懶按鈕——
@@ -1311,7 +1328,7 @@ function switchMode(m, manual){
     if(!confirm("這一輪還沒結束,確定要切換到「"+modeName(m)+"」嗎?目前這一輪會取消不計入。")) return;
   }
   if(manual){ routine=null; countUpOverride=false; } // 手動切換=中止慣例流程
-  stopTick(); running=false; phaseStarted=false; mode=m;
+  stopTick(); running=false; phaseStarted=false; phaseTask=null; mode=m;
   cuActive=false; cuAccum=0;
   applyPendingCountUp();   // 這一輪結束了,押著的正計時開關變更現在生效
   remainMs=modeMinutes(m)*60000; phaseMin=modeMinutes(m);
@@ -1321,14 +1338,16 @@ function switchMode(m, manual){
   $("phaseLabel").textContent = m==="focus" ? "準備開始專注" : "休息一下吧";
   if(m==="focus") $("microCard").style.display="none";
   updateDisplay(); updateButtons(); saveTimerState(); releaseWake();
+  renderTaskSelect();   // 上一輪中途勾完成的任務,下拉選單裡只在那一輪列出來
 }
 
 function toggleTimer(){
   ensureAudioCtx();
   if(isCountUpFocus()){
-    if(running){ cuAccum+=Date.now()-cuStart; running=false; stopTick(); releaseWake(); }
+    if(running){ cuAccum+=Date.now()-cuStart; running=false; stopTick(); releaseWake(); $("phaseLabel").textContent=pausedLabel(); }
     else{
       if(!cuActive){ cuActive=true; cuAccum=0; }
+      if(!phaseStarted) phaseTask=liveActiveTask();
       cuStart=Date.now(); running=true; phaseStarted=true; startTick(); requestWake();
       $("phaseLabel").textContent="專注中(正計時)…加油!";
       followOnFocusStart();
@@ -1337,9 +1356,10 @@ function toggleTimer(){
     if(running){
       remainMs=Math.max(0,endAt-Date.now());
       running=false; stopTick(); releaseWake();
+      $("phaseLabel").textContent=pausedLabel();   // 以前暫停後還寫「專注中…加油!」、按鈕寫「開始」,看不出是停著的(2026-11-22 功能實測)
     }else{
       if(remainMs<=0) remainMs=modeMinutes(mode)*60000;
-      if(!phaseStarted) phaseMin=modeMinutes(mode);   // 這一輪的分鐘數在「真的開始」時才定下(驗收抓到:先定再改設定會記錯)
+      if(!phaseStarted){ phaseMin=modeMinutes(mode); phaseTask=liveActiveTask(); }   // 這一輪的分鐘數與任務在「真的開始」時才定下(驗收抓到:先定再改設定會記錯)
       endAt=Date.now()+remainMs;
       running=true; phaseStarted=true; startTick(); requestWake();
       $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
@@ -1348,6 +1368,7 @@ function toggleTimer(){
   }
   updateButtons(); updateDisplay(); saveTimerState();
 }
+function pausedLabel(){ return "⏸ 暫停中,按「繼續」接著"+(mode==="focus"?"專注":"休息"); }
 
 /* 白噪音跟著計時 */
 function anySoundOn(){ return Object.keys(mixOn).some(k=>mixOn[k]); }
@@ -1385,16 +1406,18 @@ function followOnBreakStart(){
 }
 
 function resetTimer(){
-  stopTick(); running=false; phaseStarted=false;
+  stopTick(); running=false; phaseStarted=false; phaseTask=null;
   cuActive=false; cuAccum=0;
   applyPendingCountUp();
   remainMs=modeMinutes(mode)*60000; phaseMin=modeMinutes(mode);
   $("phaseLabel").textContent = mode==="focus" ? "準備開始專注" : "休息一下吧";
   updateDisplay(); updateButtons(); saveTimerState(); releaseWake();
+  renderTaskSelect();
 }
 
 function skipPhase(){
-  if(mode==="focus" && (running||cuActive)){
+  // 看 phaseStarted:倒數暫停時 running 和 cuActive 都是 false,「先暫停再跳過」不會問就丟掉這一輪(2026-11-22 功能實測;跟 09-28 修的那三處同一類)
+  if(mode==="focus" && (running||cuActive||phaseStarted)){
     if(!confirm("跳過的話,這一輪專注不會計入統計,確定嗎?")) return;
   }
   advance(false,0);
@@ -1426,7 +1449,9 @@ function finishPhase(){
   playChime(mode==="focus");
   if(navigator.vibrate) navigator.vibrate([200,100,200]);
   notifyPhaseEnd(mode==="focus");
-  advance(true, mode==="focus"?(phaseMin||settings.work):0);   // 記這一輪開始時定下的分鐘數
+  // 記這一輪開始時定下的分鐘數;日期與小時用「這一輪真正結束的時間」(endAt)——手機鎖屏把網頁凍住、很晚才發現走完時,
+  // 不能記成發現的那一刻(取 min:測試或其他路徑提早叫這裡時,不可以記成未來的時間)
+  advance(true, mode==="focus"?(phaseMin||settings.work):0, Math.min(endAt||Date.now(), Date.now()));
 }
 
 /* ============ 系統通知(背景也看得到) ============ */
@@ -1464,41 +1489,53 @@ function pushNotify(title,body){
   }
 }
 
-// completed=時間走完或按「完成」;minutes=要記錄的專注分鐘數
-function advance(completed, minutes){
+// completed=時間走完或按「完成」;minutes=要記錄的專注分鐘數;
+// endTs=這一輪真正結束的時間(倒數傳 endAt;沒傳=現在,正計時按「完成」就是現在)
+function advance(completed, minutes, endTs){
   stopTick(); running=false; releaseWake();
+  endTs=endTs||Date.now();
+  // 結束很久才發現(App 關著、網頁被凍住)就不自動開始下一輪,見 AUTO_START_GRACE_MS
+  const autoOk = Date.now()-endTs <= AUTO_START_GRACE_MS;
   if(mode==="focus"){
     if(completed && minutes>0){
       roundCount++;
       lsSet("pomo_rounds", String(roundCount));
       // id:讓每一筆紀錄有自己的身分。少了它,同一小時內兩輪同長度的專注會長得
       // 一模一樣,跨裝置合併時分不出「兩筆真紀錄」還是「同一筆重複」。
+      // 日期與小時用 endTs:晚上 23:05 開始、關掉 App 隔天才打開,要記在前一天 23 點,不是打開的那一刻(2026-11-22 功能實測)
+      const endD=new Date(endTs);
       const rec={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
-        d:todayStr(), m:minutes, t:new Date().getHours()};
-      const t=tasks.find(x=>x.id===activeTask && !x.done);
+        d:ymdOf(endD), m:minutes, t:endD.getHours()};
+      // 記在這一輪的任務(phaseTask)上;中途勾完成照樣算。沒開始過就直接走到這裡的(舊存檔)才退回目前任務
+      const tid = phaseStarted ? phaseTask : liveActiveTask();
+      const t=tid ? tasks.find(x=>x.id===tid) : null;
       if(t){ t.pomos=(t.pomos||0)+1; rec.task=t.id; renderTasks(); }
       sessions.push(rec);
+      // 一般的「完成一輪」提示要先發:下面 renderStats() 的達標慶祝與慣例全部完成會蓋過它。
+      // 以前順序相反,慶祝與「慣例完成、已恢復正計時」一出現就被這句換掉,從來看不到(2026-11-22 功能實測)
+      if(!routine) toast("🍅 完成一輪專注("+minutes+" 分鐘)!休息一下吧");
+      const goalBefore=goalCelebrated;
       saveData(); renderStats();
       if(routine){
         routine.done++;
         if(routine.done>=routine.target){
           toast("🎉 慣例「"+routine.name+"」全部完成,共 "+routine.target+" 輪,太厲害了!"
-            + (countUpOverride ? "已恢復正計時模式。" : ""));
+            + (countUpOverride ? "已恢復正計時模式。" : "")
+            + (goalCelebrated!==goalBefore ? "今日目標也達成了 🎉" : ""));   // 同一刻達標:兩件喜事併成一則,不要互相蓋掉
           routine=null; countUpOverride=false;   // 慣例結束 → 還原正計時
         }
       }
-      if(!routine) toast("🍅 完成一輪專注("+minutes+" 分鐘)!休息一下吧");
       if(settings.microEx) showMicro();
       if(settings.moodLog){ moodTargetId=rec.id||null; $("moodOv").classList.add("open"); }
     }
     const nextMode=(roundCount>0 && roundCount%settings.longEvery===0)?"long":"short";
     switchMode(nextMode,false);
     followOnBreakStart();
-    if(completed && minutes>0 && (settings.autoStartBreak||routine)) toggleTimer();
+    if(completed && minutes>0 && autoOk && (settings.autoStartBreak||routine)) toggleTimer();
   }else{
     if(completed && !routine) toast("休息結束,回來繼續囉");
     switchMode("focus",false);
-    if(completed && (settings.autoStartWork||routine)) toggleTimer();
+    if(completed && autoOk && (settings.autoStartWork||routine)) toggleTimer();
   }
 }
 
@@ -1526,7 +1563,7 @@ function updateDisplay(){
   }
 }
 function updateButtons(){
-  $("startBtn").textContent = running ? "暫停" : (cuActive&&cuAccum>0 ? "繼續" : "開始");
+  $("startBtn").textContent = running ? "暫停" : (phaseStarted||(cuActive&&cuAccum>0) ? "繼續" : "開始");   // 倒數暫停中也寫「繼續」(以前只有正計時會)
   const cu=isCountUpFocus();
   // 嚴格模式:只要這一輪開始了就藏起偷懶按鈕,暫停也一樣。
   // 暫停本身不擋(真的有急事要能停),但不准用「暫停→跳過」偷懶。
@@ -1544,7 +1581,7 @@ function toggleCountUpSetting(cb){
 }
 
 function saveTimerState(){
-  lsSet("pomo_timer", JSON.stringify({mode,running,endAt,remainMs,cuActive,cuStart,cuAccum,routine,phaseStarted,countUpOverride,phaseMin,pendingCountUp}));
+  lsSet("pomo_timer", JSON.stringify({mode,running,endAt,remainMs,cuActive,cuStart,cuAccum,routine,phaseStarted,countUpOverride,phaseMin,pendingCountUp,phaseTask}));
 }
 function restoreTimerState(){
   let s=null;
@@ -1557,12 +1594,15 @@ function restoreTimerState(){
   phaseStarted=!!s.phaseStarted;   // 重新整理不可以變成繞過嚴格模式的後門
   if(phaseStarted && +s.phaseMin>0) phaseMin=+s.phaseMin;   // 只有這一輪已經開始才接回舊值;沒開始的用現在的設定(驗收抓到:改了時長沒開始就關 App,會記成舊的)
   pendingCountUp = (phaseStarted && (s.pendingCountUp===true || s.pendingCountUp===false)) ? s.pendingCountUp : null;   // 押著的正計時開關也要接回來(重新整理不可以弄丟)
+  // 這一輪的任務也接回來;舊格式的存檔沒有這個欄位 → 退回目前任務(跟以前一樣)
+  if(phaseStarted) phaseTask = ("phaseTask" in s) ? (s.phaseTask||null) : liveActiveTask();
+  let awayTooLong=false;
   if(s.cuActive && mode==="focus" && settings.countUp){
     cuActive=true; cuAccum=s.cuAccum||0;
     // 離開太久(關掉分頁/關機)就不把這段算進去,否則會記出假紀錄
     const away = s.running ? (Date.now()-(s.cuStart||Date.now())) : 0;
     if(s.running && away > MAX_SESSION_MIN*60000){
-      running=false;
+      running=false; awayTooLong=true;
       $("phaseLabel").textContent="正計時已暫停(離開太久,那段沒算進去)";
     }else if(s.running){
       cuStart=s.cuStart; running=true; startTick(); requestWake();
@@ -1572,11 +1612,14 @@ function restoreTimerState(){
     remainMs=s.endAt-Date.now(); endAt=s.endAt; running=true; startTick(); requestWake();
     $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
   }else if(s.running && s.endAt<=Date.now()){
-    advance(true, mode==="focus"?(phaseMin||settings.work):0); // 關頁面期間走完:算完成
+    // 關頁面期間走完:算完成,記在真正結束的那一刻(s.endAt);結束超過一分鐘的不自動開下一輪(見 advance)
+    advance(true, mode==="focus"?(phaseMin||settings.work):0, s.endAt);
   }else if(!s.running && s.remainMs>0 && s.remainMs<(phaseStarted&&phaseMin ? phaseMin : modeMinutes(mode))*60000){   // 已開始的一輪跟 phaseMin 比(暫停中把時長調小再重整,剩餘時間不可以變)
     remainMs=s.remainMs;
   }
-  updateDisplay(); updateButtons();
+  // 暫停中的這一輪重新整理後也要看得出是暫停,不是「準備開始」(嚴格模式下重設鈕又藏著,兩者互相矛盾;2026-11-22 功能實測)
+  if(phaseStarted && !running && !awayTooLong) $("phaseLabel").textContent=pausedLabel();
+  updateDisplay(); updateButtons(); renderTaskSelect();
   saveTimerState();   // 上面的 switchMode() 已經把「空狀態」寫回存檔,不補存的話連續重新整理兩次這一輪就消失(第二輪驗收抓到,HEAD 就有)
 }
 
@@ -1965,7 +2008,7 @@ function renderFavs(){
   favMixes.forEach((f,i)=>{
     const chip=document.createElement("div");
     chip.className="fav-chip";
-    chip.innerHTML='<span>🎵 '+f.name+'</span><span class="del">✕</span>';
+    chip.innerHTML='<span>🎵 '+escapeHtml(f.name)+'</span><span class="del">✕</span>';   // 名稱要跳脫,任務與情境都有,只有這裡漏了(2026-11-22 功能實測)
     chip.querySelector(".del").onclick=e=>{
       e.stopPropagation();
       if(confirm("刪除組合「"+f.name+"」?")){ markDeleted("fav", favKey(f)); favMixes.splice(i,1); saveData(); renderFavs(); }
@@ -1998,7 +2041,12 @@ function setSleepTimer(v){
   const mins=parseInt(v,10);
   clearTimeout(sleepFadeId); clearTimeout(sleepStopId);
   sleepFadeId=null; sleepStopId=null; sleepEndAt=0;
-  if(masterGain) masterGain.gain.value=settings.volume/100;
+  // 最後 30 秒淡出中改選「關閉」或別的時間:要先把排好的淡出取消。只設 .value 等於在現在插一個點,
+  // 排好的淡出照樣跑完,聲音淡到無聲、混音器卻還寫「播放中」(2026-11-22 功能實測,真瀏覽器重現)
+  if(masterGain){
+    try{ masterGain.gain.cancelScheduledValues(audioCtx.currentTime); }catch(e){}
+    masterGain.gain.value=settings.volume/100;
+  }
   if(mins>0){
     sleepEndAt=Date.now()+mins*60000;
     sleepFadeId=setTimeout(()=>{
@@ -2147,7 +2195,9 @@ function taskCountLabel(t){
   return t.est ? "🍅 "+(t.pomos||0)+"/"+t.est : "🍅×"+(t.pomos||0);
 }
 function pickTask(id){
-  activeTask=id||null; saveData(); renderTasks();
+  activeTask=id||null;
+  if(phaseStarted && mode==="focus"){ phaseTask=activeTask; saveTimerState(); }   // 這一輪中途改選 = 這一輪改記在新選的任務上
+  saveData(); renderTasks();
 }
 function completeTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return;
@@ -2222,15 +2272,23 @@ function renderTaskSelect(){
   const opt0=document.createElement("option");
   opt0.value=""; opt0.textContent="📝 這一輪不指定任務";
   sel.appendChild(opt0);
+  // 下拉選單顯示的一定要是「番茄真的會記上去」的那個任務(2026-11-22 功能實測):
+  // 這一輪進行中 → 這一輪的任務(中途勾完成也照樣記它);沒在跑 → 目前任務
+  const shownId = (phaseStarted && mode==="focus") ? phaseTask : activeTask;
   let avail=tasks.filter(t=>!t.done);
   const todays=avail.filter(isTodayTask);
-  if(todays.length) avail=todays; // 有今日待辦時,只顯示今天要做的
+  // 有今日待辦時只顯示今天要做的,但目前任務不在其中也要列出來——
+  // 以前把它藏起來、畫面寫「不指定任務」,番茄卻照樣記在它身上
+  if(todays.length) avail=todays.concat(avail.filter(t=>t.id===shownId && !isTodayTask(t)));
+  // 已完成的只在「這一輪進行中、而且是中途才勾完成的」時候列出來
+  const cur=(phaseStarted && mode==="focus" && shownId) ? tasks.find(t=>t.id===shownId && t.done) : null;
+  if(cur) avail.push(cur);
   avail.forEach(t=>{
     const o=document.createElement("option");
-    o.value=t.id; o.textContent=(isTodayTask(t)?"☀️ ":"🎯 ")+t.name+"("+taskCountLabel(t)+")";
+    o.value=t.id; o.textContent=(t.done?"✅ ":isTodayTask(t)?"☀️ ":"🎯 ")+t.name+"("+taskCountLabel(t)+")";
     sel.appendChild(o);
   });
-  sel.value=activeTask&&avail.some(t=>t.id===activeTask)?activeTask:"";
+  sel.value=shownId&&avail.some(t=>t.id===shownId)?shownId:"";
 }
 function escapeHtml(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
 // 要塞進 onclick="..." 屬性裡的 JS 字串:escapeHtml 不會轉雙引號(文字節點序列化本來就不轉),要自己轉成 &quot;
@@ -2473,7 +2531,7 @@ function deleteSession(id){
   const i=sessions.findIndex(x=>x.id===id);
   if(i<0) return;
   const s=sessions[i];
-  if(!confirm("刪除這筆紀錄?\n"+s.d+" "+String(s.t).padStart(2,"0")+" 點 · "+s.m+" 分鐘"
+  if(!confirm("刪除這筆紀錄?\n"+s.d+(typeof s.t==="number" ? " "+String(s.t).padStart(2,"0")+" 點" : "")+" · "+s.m+" 分鐘"
     +"\n\n刪掉後統計、熱力圖、連續天數都會跟著扣掉,這個動作沒辦法直接復原(有開雲端備份的話,可以從「🕘 看以前的備份」救回)。")) return;
   markDeleted("session", id);
   sessions.splice(i,1);
@@ -2566,14 +2624,26 @@ function renderTaskTime(){
 }
 
 /* 📋 最近的專注紀錄:讓記錯的那一筆刪得掉 */
+// 一次列幾筆;「再顯示 40 筆」會加大。以前寫死只列最後 40 筆,一天 8 顆的話 5 天前記錯的那筆就再也刪不掉,
+// 違反 CLAUDE.md 第 31 條「紀錄一定要刪得掉」(2026-11-22 功能實測)
+let sessionListShow=40;
+function moreSessions(){ sessionListShow+=40; renderSessionList(); }
 function renderSessionList(){
   const box=$("sessionList"); if(!box) return;
-  const recent=sessions.slice(-40).reverse();
+  // 依日期+小時排:合併別台的紀錄後,陣列裡同一天的先後是合併的順序,不是時間順序
+  // (以前今天 08:00、09:00 會排在 22:00 上面;同一小時照原本先後;沒有小時的舊紀錄排在那天最前面)
+  const hr=s=>typeof s.t==="number"?s.t:-1;
+  const sorted=sessions.map((s,i)=>[s,i]).sort((a,b)=>{
+    const da=String(a[0].d), db=String(b[0].d);
+    return da<db?-1:da>db?1:(hr(a[0])-hr(b[0]))||(a[1]-b[1]);
+  }).map(x=>x[0]);
+  const recent=sorted.slice(-sessionListShow).reverse();
   if(!recent.length){ box.innerHTML='<div class="hour-note">還沒有任何紀錄。</div>'; return; }
+  const older=sorted.length-recent.length;
   box.innerHTML=recent.map(s=>{
     const t=s.task ? tasks.find(x=>x.id===s.task) : null;
     return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px">'
-      + '<span style="flex:1">'+s.d+' <span style="color:var(--dim)">'+String(s.t).padStart(2,"0")+':00</span> · <b>'+s.m+'</b> 分'
+      + '<span style="flex:1">'+s.d+(typeof s.t==="number" ? ' <span style="color:var(--dim)">'+String(s.t).padStart(2,"0")+':00</span>' : '')+' · <b>'+s.m+'</b> 分'
       + (t ? ' <span style="color:var(--dim)">· '+escapeHtml(t.name)+'</span>' : '')
       + (s.mood!==undefined ? ' '+["😵","🙂","😃"][s.mood] : '')
       + '</span>'
@@ -2581,7 +2651,8 @@ function renderSessionList(){
       // 雙引號要轉成 &quot;,不然 onclick 屬性在第一個引號就結束,按鈕整個按不動
       // (2026-09-28 功能實測抓到:jsdom 與 Firefox 兩套測試都只直接呼叫函式,從沒真的點過按鈕)
       + 'onclick="deleteSession('+attrJs(s.id)+')">✕</button></div>';
-  }).join("");
+  }).join("")
+  + (older>0 ? '<button class="btn" id="moreSessionsBtn" style="margin-top:10px;width:100%;background:var(--card2);color:var(--text);font-size:13px" onclick="moreSessions()">再顯示 '+Math.min(40,older)+' 筆(還有 '+older+' 筆更早的)</button>' : '');
 }
 function recordMood(v){
   // 用 id 認人。不能用「陣列最後一筆」——跳出這個問句到你按下去之間,
@@ -2831,6 +2902,9 @@ function applyTheme(){
   if(meta) meta.content = settings.theme==="light" ? "#eef0f7" : "#1a1c2c";
 }
 document.addEventListener("keydown",e=>{
+  // 按著 Ctrl/Alt/Cmd 是瀏覽器或系統的快捷鍵,不是給 App 的:以前 Ctrl+F 找字會開全螢幕時鐘、
+  // Ctrl+2 切分頁會切到短休息(暫停中還跳「這一輪會取消」,順手按確定就丟掉一輪;2026-11-22 功能實測)
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
   const tag=e.target && e.target.tagName;
   if(tag==="INPUT"||tag==="SELECT"||tag==="TEXTAREA") return;
   if(document.querySelector(".overlay.open")) return;
@@ -3158,6 +3232,7 @@ function mergeBackup(data){
     settingsAtDirty=true;   // 時間戳交給最後的 saveData() 跟設定一起存:設定沒存成就不存它(否則重新整理後時間戳打平、再也合併不回來)
     settingsSnap=settingsSnapshot();   // 別讓下面的 saveData() 又把時間戳蓋成現在
     applySettingsToUI(); applyHealthToUI(); applyTheme(); renderSoundGrid(); scheduleAllRems();
+    updateButtons();   // 別台改了嚴格模式:這一輪的「跳過」「重設」要馬上藏起來或冒出來,不是等下一次按暫停(2026-11-22 功能實測)
     if(!phaseStarted){ remainMs=modeMinutes(mode)*60000; phaseMin=modeMinutes(mode); updateDisplay(); }   // 暫停中合併進無關的設定,剩餘時間不可以被重設(驗收抓到)
   }
   /* ② 專注紀錄:有 id 的用 id 認人並過墓碑(2026-08-10 起紀錄可刪除,刪了會立碑),沒 id 的舊紀錄數份數。
@@ -3459,6 +3534,7 @@ async function ghRestore(sha, whenText){
     if(confirm("要還原成 "+whenText+" 那個版本嗎?\n\n"
       + "那個版本有 "+data.sessions.length+" 筆專注紀錄、"+((data.tasks||[]).length)+" 個任務。\n"
       + "這台裝置目前的資料("+sessions.length+" 筆)會先換成那個版本(任務、情境、設定以那個版本為準),那之後刪掉的也會救回來。"
+      + (phaseStarted ? "進行中的這一輪計時也會重設。" : "")   // 跟匯入的確認框一樣要講(09-28 只改了匯入那一邊;2026-11-22 功能實測)
       + (autoOn ? "\n開著自動同步,稍後同步時雲端現有的專注紀錄會再合併回來(兩邊都保留),那個版本的任務與設定也會傳到其他裝置。" : "\n只改這台,雲端不會動。"))){
       const failBefore=saveFailCount;
       reviveTombed(data); markRestoredNewest(data);
@@ -3475,7 +3551,7 @@ async function ghDoOverwrite(){
   if(ghBusy) return; ghBusy=true; ghStatus("⏳ 下載中…");
   try{
     const data=await ghDownload();
-    if(confirm("【下載並覆蓋】會刪除這台裝置目前的全部紀錄("+sessions.length+" 筆),完全換成雲端備份("+data.sessions.length+" 筆)。\n只建議「新裝置第一次還原」時用。確定嗎?")){
+    if(confirm("【下載並覆蓋】會刪除這台裝置目前的全部紀錄("+sessions.length+" 筆),完全換成雲端備份("+data.sessions.length+" 筆)"+(phaseStarted?",進行中的這一輪計時也會重設":"")+"。\n只建議「新裝置第一次還原」時用。確定嗎?")){
       const failBefore=saveFailCount;
       applyImport(data); ghSyncedOk=true;
       ghStatus(saveResultMsg(failBefore, "已還原成雲端備份"));
@@ -3699,14 +3775,15 @@ function copyAuditPrompt(){
   }else fallbackCopy(AUDIT_PROMPT,done);
 }
 // file:// 開啟或舊瀏覽器沒有 clipboard API,退回老方法
-function fallbackCopy(text, done){
+// whatToAsk:複製失敗時叫他直接跟 Claude 說什麼。體檢卡與審查卡共用這裡,以前審查卡失敗也叫他「做一次全面體檢」(2026-11-22 功能實測)
+function fallbackCopy(text, done, whatToAsk){
   const ta=document.createElement("textarea");
   ta.value=text; ta.style.position="fixed"; ta.style.top="-9999px";
   document.body.appendChild(ta); ta.select();
   let ok=false;
   try{ ok=document.execCommand("copy"); }catch(e){}
   document.body.removeChild(ta);
-  ok ? done() : toast("❌ 複製失敗,請直接跟 Claude 說「做一次全面體檢」");
+  ok ? done() : toast("❌ 複製失敗,請直接跟 Claude 說「"+(whatToAsk||"做一次全面體檢")+"」");
 }
 
 /* ============ 🗓 審查紀錄(2026-09-27) ============
@@ -3771,9 +3848,12 @@ function reviewPrompt(id, today){
 function copyReviewPrompt(id){
   const text=reviewPrompt(id); if(!text) return;
   const done=()=>toast("✅ 審查指令已複製,開新對話貼上就行");
+  const c=reviewLog().categories.find(x=>x.id===id);
+  const name=c?c.name:"";
+  const ask="做一次『"+name+"』"+(/審查$/.test(name)?"":"審查");   // 外面還包著「」所以用『』;「規則審查」不要變成「規則審查審查」
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));
-  }else fallbackCopy(text,done);
+    navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done,ask));
+  }else fallbackCopy(text,done,ask);
 }
 function renderReview(){
   const box=$("reviewCard"); if(!box) return;
