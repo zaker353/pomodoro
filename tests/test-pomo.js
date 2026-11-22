@@ -1018,6 +1018,30 @@ const LAST_WEEK_DAY = daysAgoStr(7);
     A.E("ghSyncedOk=true; ghDirty=true; ghAutoUpload()"); await sleep(250);
     check("🩺 手動上傳途中被匯入:之後自動上傳先合併,雲端原有的紀錄一筆都沒少",
       beforeRace2.every(id=>cloud().sessions.some(s=>s.id===id)) && cloud().sessions.some(s=>s.id==="imp8"), ids(cloud().sessions));
+    // ⑥e 上傳途中又做完一輪(2026-11-03 第二輪驗收實測,第八節第 1 件):那一筆不在這次傳上去的內容裡,
+    // 待傳標記要留著、下一次自動上傳就帶上去(以前一律清掉,要等下一次有改動才會傳)。
+    // 途中排的那次自動上傳,假裝已經在上傳中觸發、看到忙碌就跳過了(上傳很慢時會這樣)→ 回來後要重新排一次
+    A.w.__ghOnPut = () => A.E("sessions.push({id:'midUp',d:todayStr(),m:25,t:9}); saveData(); ghAutoUpload(); clearTimeout(ghUploadTimer); ghUploadTimer=null;");
+    A.E("ghSyncedOk=true; ghDirty=true; ghAutoBusy=false; window.__p=ghAutoUpload();");
+    await A.w.__p; await sleep(50);
+    check("🩺 自動上傳途中又做完一輪:那一筆還沒上去,待傳標記留著、也重新排了自動上傳",
+      A.E("ghDirty")===true && A.E("ghUploadTimer")!==null && !cloud().sessions.some(s=>s.id==="midUp"), "ghDirty="+A.E("ghDirty")+" timer="+A.E("ghUploadTimer"));
+    A.E("clearTimeout(ghUploadTimer); ghAutoUpload()"); await sleep(250);
+    check("🩺 自動上傳途中又做完一輪:下一次自動上傳就帶上去,之後待傳標記才清掉", cloud().sessions.some(s=>s.id==="midUp") && A.E("ghDirty")===false);
+    // 手動按「上傳備份」也一樣
+    A.w.__ghOnPut = () => A.E("sessions.push({id:'midUp2',d:todayStr(),m:25,t:10}); saveData();");
+    A.E("ghBusy=false; window.__p=ghDoUpload();");
+    await A.w.__p; await sleep(50);
+    check("🩺 手動上傳途中又做完一輪:待傳標記也留著", A.E("ghDirty")===true && !cloud().sessions.some(s=>s.id==="midUp2"));
+    A.E("clearTimeout(ghUploadTimer); ghAutoUpload()"); await sleep(250);
+    // 先合併別台的再上傳:合併本身會存檔,不可以被當成「途中又有改動」而多傳一次
+    { const c=cloud(); c.sessions.push({id:'fromB',d:'2026-10-09',m:25,t:11}); A.w.__ghFiles["pomodoro-backup.json"]=JSON.stringify(c); }
+    A.E("ghDirty=true; ghAutoBusy=false; window.__p=ghAutoUpload();");
+    await A.w.__p; await sleep(50);
+    check("🩺 先合併別台的再上傳:傳完待傳標記就清掉(合併本身存檔不算途中的新改動)",
+      A.E("ghDirty")===false && A.E("sessions.some(s=>s.id==='fromB')") && cloud().sessions.some(s=>s.id==="midUp2") && cloud().sessions.some(s=>s.id==="fromB"),
+      "ghDirty="+A.E("ghDirty")+" 雲端="+ids(cloud().sessions));
+    A.E("clearTimeout(ghUploadTimer);");
     // ⑥d 還原 2026-08-09 以前(紀錄沒有 id)的版本,也救得回被刪的那筆(還原時先補 id 才認得出來;驗收抓到這行沒測試守)
     const OLDV=JSON.stringify({app:"pomodoro-whitenoise",version:2,settings:{work:25},roundCount:0,
       sessions:[{d:"2026-05-01",m:25,t:9},{d:"2026-05-01",m:25,t:9}]});

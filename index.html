@@ -3391,12 +3391,21 @@ let ghKnownSha=null;
 // 換代計數:這台被整份換掉(匯入/還原/下載並覆蓋)或換倉庫時 +1。上傳途中換代了,回來的版本代號就不能記——
 // 否則它會把剛清掉的 ghKnownSha 寫回舊值,下一次自動上傳就不合併、直接蓋掉雲端(2026-11-03 驗收抓到)。
 let ghGen=0;
+// 改動計數:每次 ghMarkDirty() +1。叫 ghUpload() 之前記下來,上傳回來時數字變了 = 上傳途中又有改動(例如剛好做完一輪),
+// 那一筆不在這次傳上去的內容裡,ghDirty 要留著。以前一律清掉,那一筆要等下一次有改動才會上傳(2026-11-03 第二輪驗收實測)。
+let ghEditSeq=0;
 const GH_UPLOAD_DEBOUNCE=90000; // 最後一次變更後 90 秒才上傳,使用中不會狂傳
 function ghMarkDirty(){
   if(!loadGh()||!ghAutoEnabled()) return;
-  ghDirty=true;
+  ghDirty=true; ghEditSeq++;
   clearTimeout(ghUploadTimer);
   ghUploadTimer=setTimeout(ghAutoUpload, GH_UPLOAD_DEBOUNCE);
+}
+// 上傳回來後:途中沒有新改動才清掉待傳標記;有的話留著,並重新排一次自動上傳
+// (途中排的那次可能剛好在上傳中觸發、看到忙碌就跳過了——上傳很慢時會發生)
+function ghAfterUpload(seq){
+  if(seq===ghEditSeq){ ghDirty=false; return; }
+  if(ghDirty && ghAutoEnabled()){ clearTimeout(ghUploadTimer); ghUploadTimer=setTimeout(ghAutoUpload, GH_UPLOAD_DEBOUNCE); }
 }
 async function ghAutoUpload(){
   if(!ghDirty||ghAutoBusy) return;
@@ -3418,8 +3427,10 @@ async function ghAutoUpload(){
   try{
     const sha=(await ghFindSha(cfg))||null;
     if(sha && sha!==ghKnownSha) ghMergeIn(await ghDownload());
-    const newSha=await ghUpload(sha);
-    if(gen===ghGen){ ghKnownSha=newSha; ghDirty=false; }
+    // 合併完才記改動計數:合併本身會存檔(也會 +1),那些已經包在這次要傳的內容裡,不算「途中的新改動」
+    const seq=ghEditSeq;
+    const newSha=await ghUpload(sha);   // 有帶 sha:ghUpload 一進去就打包內容,中間沒有等待
+    if(gen===ghGen){ ghKnownSha=newSha; ghAfterUpload(seq); }
     else ghKnownSha=null;   // 上傳途中這台被整份換掉或換了倉庫:下次一律先合併
     ghRecordStatus({at:Date.now(), ok:true, action:"upload"});
   }catch(e){
@@ -3462,8 +3473,9 @@ function ghStatus(msg){ const el=$("ghStatus"); if(el) el.textContent=msg; }
 async function ghDoUpload(){
   if(ghBusy) return; ghBusy=true; ghStatus("⏳ 上傳中…");
   try{
-    const gen=ghGen, newSha=await ghUpload();
-    if(gen===ghGen){ ghKnownSha=newSha; ghDirty=false; ghSyncedOk=true; } else ghKnownSha=null;
+    // 手動上傳會先查雲端版本代號才打包,查的途中改的也會傳上去;那時候計數已經變了,頂多多傳一次(無害)
+    const gen=ghGen, seq=ghEditSeq, newSha=await ghUpload();
+    if(gen===ghGen){ ghKnownSha=newSha; ghAfterUpload(seq); ghSyncedOk=true; } else ghKnownSha=null;
     ghStatus("✅ 上傳完成!雲端備份已更新("+new Date().toLocaleTimeString("zh-TW")+")");
   }
   catch(e){ ghStatus("❌ "+e.message); }
