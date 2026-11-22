@@ -1991,6 +1991,76 @@ const LAST_WEEK_DAY = daysAgoStr(7);
     check("☁️ 不是今年的:連年份一起寫,失敗的原因照樣顯示", line==="上次自動同步:"+new Date(at).getFullYear()+"/"+md(at)+" "+hm(at)+"(400 天前) 上傳 ❌ 壞了", line);
     E("localStorage.removeItem('pomo_ghsync_status'); localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); clearTimeout(ghUploadTimer); ghDirty=false; ghRender();");
   }
+  // ── 🧪 突變小工具 scripts/mutate.mjs(2026-11-23)本身:改壞→跑測試→一定還原成一模一樣。
+  //    拿暫存資料夾裡的假檔與假的小測試(--run)驗,不然它會跑這整套、這整套又跑它,跑不完。
+  {
+    const os = require("os"), { spawnSync } = require("child_process");
+    const MUT = path.join(__dirname, "..", "scripts", "mutate.mjs");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pomo-mutate-test-"));
+    const fx = path.join(tmp, "fx.txt"), seen = path.join(tmp, "seen.txt"), nested = path.join(tmp, "nested.txt");
+    const FX = Buffer.from("第一行\r\nconst A = 1;\r\nconst B = 1;\r\n// 沒人看的註解\r\n", "utf8");   // CRLF + 中文
+    fs.writeFileSync(fx, FX);
+    // 假的測試:記下它看到的檔案內容,甲乙兩條照 test-pomo 的格式印 ✅/❌ 與總結
+    const chk = path.join(tmp, "check.js");
+    fs.writeFileSync(chk, `const fs=require("fs"); const s=fs.readFileSync(${JSON.stringify(fx)},"utf8"); fs.writeFileSync(${JSON.stringify(seen)},s);
+const a=s.includes("const A = 1;"), b=s.includes("const B = 1;");
+console.log((a?"✅":"❌")+" 甲守得住"); console.log((b?"✅":"❌")+" 乙守得住");
+console.log("\\n總結:"+((a?1:0)+(b?1:0))+"/2 通過"); process.exit(a&&b?0:1);`);
+    const crash = path.join(tmp, "crash.js");
+    fs.writeFileSync(crash, `throw new Error("boom");`);
+    // 跑測試途中,另一個突變想改同一個檔:要被鎖擋下,而且不可以動到檔案、不可以刪掉第一個的鎖
+    const nest = path.join(tmp, "nest.js");
+    fs.writeFileSync(nest, `const fs=require("fs"),os=require("os"),{spawnSync}=require("child_process");
+const locks=()=>fs.readdirSync(os.tmpdir()).filter(f=>/^pomo-mutate-.*\\.lock$/.test(f));
+const before=locks(), mid=fs.readFileSync(${JSON.stringify(fx)});
+const r=spawnSync(process.execPath,[${JSON.stringify(MUT)},${JSON.stringify(fx)},"const B = 1;","const B = 2;","--run",${JSON.stringify(chk)}],{encoding:"utf8"});
+const after=locks();
+fs.writeFileSync(${JSON.stringify(nested)}, JSON.stringify({status:r.status, out:(r.stdout||"")+(r.stderr||""), untouched:fs.readFileSync(${JSON.stringify(fx)}).equals(mid), lockKept:before.length>0&&before.every(f=>after.includes(f))}));
+console.log("❌ 外層的改壞"); console.log("\\n總結:0/1 通過"); process.exit(1);`);
+    const mut = (...a) => { try{ fs.unlinkSync(seen); }catch(e){} const r = spawnSync(process.execPath, [MUT, ...a], {encoding:"utf8"}); return { status:r.status, out:(r.stdout||"")+(r.stderr||"") }; };
+    const same = () => fs.readFileSync(fx).equals(FX);
+    const seenText = () => fs.existsSync(seen) ? fs.readFileSync(seen, "utf8") : null;
+    // ① 抓到:改壞的內容真的寫進去了(改壞字串裡的 $& 照字面,不被當成取代語法),跑完一模一樣
+    let r = mut(fx, "const A = 1;", "const A = '$&2';", "--run", chk);
+    check("🧪 突變小工具:抓到時回 0、改壞的內容照字面寫進去、跑完位元組一模一樣",
+      r.status===0 && r.out.includes("✅ 突變有被抓到") && seenText()==="第一行\r\nconst A = '$&2';\r\nconst B = 1;\r\n// 沒人看的註解\r\n" && same(), "結束碼 "+r.status+" "+r.out.replace(/\s+/g," ").slice(-80));
+    // ② 多行的原字串用 LF 打,檔案是 CRLF:照樣找得到,改壞的那段也用 CRLF 寫進去
+    r = mut(fx, "第一行\nconst A = 1;", "第一行\nconst A = 9;", "--run", chk);
+    check("🧪 突變小工具:參數用 LF、檔案是 CRLF 也找得到,寫進去的換行跟原檔一樣",
+      r.status===0 && seenText()==="第一行\r\nconst A = 9;\r\nconst B = 1;\r\n// 沒人看的註解\r\n" && same(), "結束碼 "+r.status);
+    // ③ --expect 指名的那條沒紅(紅的是別條)→ 不算抓到
+    r = mut(fx, "const A = 1;", "const A = 2;", "--expect", "乙", "--run", chk);
+    check("🧪 突變小工具:--expect 指名的那條沒紅就回 1、講出紅的是別條", r.status===1 && r.out.includes("紅的是別條") && same(), "結束碼 "+r.status);
+    // ④ 測試全綠 → 沒被抓到
+    r = mut(fx, "// 沒人看的註解", "// 改過", "--run", chk);
+    check("🧪 突變小工具:測試全綠時回 1、提醒可能是假防護,檔案照樣還原", r.status===1 && r.out.includes("可能是假防護") && same(), "結束碼 "+r.status);
+    // ⑤ 原字串不只一處 → 不動手、不跑測試
+    r = mut(fx, "const", "let", "--run", chk);
+    check("🧪 突變小工具:原字串出現不只一次就不動手(不改檔、不跑測試)", r.status===2 && r.out.includes("出現 2 次") && same() && seenText()===null, "結束碼 "+r.status);
+    // ⑥ 測試整套中斷 → 看不出是哪條抓到,但一樣還原
+    r = mut(fx, "const A = 1;", "const A = 2;", "--run", crash);
+    check("🧪 突變小工具:測試整套中斷時回 1、講明中斷,檔案照樣還原", r.status===1 && r.out.includes("整套測試中斷") && same(), "結束碼 "+r.status);
+    // ⑦ 專案資料夾與暫存資料夾以外的檔不准改(檔案不用真的存在,在那之前就擋下)
+    r = mut(path.join(__dirname, "..", "..", "不准改.txt"), "a", "b", "--run", chk);
+    check("🧪 突變小工具:專案資料夾以外的檔不准改", r.status===2 && r.out.includes("只准改專案資料夾裡的檔"), "結束碼 "+r.status);
+    // ⑧ 同一個檔同時兩個突變:第二個被鎖擋下、不動檔案、不刪第一個的鎖;第一個跑完照樣還原、鎖也清掉(之後還能再跑)
+    r = mut(fx, "const A = 1;", "const A = 3;", "--run", nest);
+    const nr = fs.existsSync(nested) ? JSON.parse(fs.readFileSync(nested, "utf8")) : {};
+    const again = mut(fx, "const A = 1;", "const A = 4;", "--run", chk);
+    check("🧪 突變小工具:同一個檔同時兩個突變,第二個被擋下且不動檔案、不刪第一個的鎖",
+      nr.status===2 && String(nr.out).includes("另一個突變正在跑") && nr.untouched===true && nr.lockKept===true, JSON.stringify(nr).slice(0,120));
+    check("🧪 突變小工具:第一個跑完照樣還原、鎖也清掉(馬上再跑一次可以)", r.status===0 && again.status===0 && same(), "結束碼 "+r.status+"/"+again.status);
+    fs.rmSync(tmp, {recursive:true, force:true});
+    // 工具的還原被改壞時(突變測這段的時候),它會故意留下鎖與備份給人手動救;這裡只收拾指向這次假檔的那些
+    for(const f of fs.readdirSync(os.tmpdir()).filter(f=>/^pomo-mutate-.*\.lock$/.test(f))){
+      const lp = path.join(os.tmpdir(), f); let c = "";
+      try{ c = fs.readFileSync(lp, "utf8"); }catch(e){}
+      if(!c.includes(tmp)) continue;
+      const bk = c.split("\n")[0];
+      if(path.dirname(bk)===os.tmpdir() && /^pomo-mutate-.*\.bak$/.test(path.basename(bk))) try{ fs.unlinkSync(bk); }catch(e){}
+      try{ fs.unlinkSync(lp); }catch(e){}
+    }
+  }
   console.log(results.join("\n"));
   console.log("\n總結:"+(results.length-failed)+"/"+results.length+" 通過"+(failed?"、"+failed+" 個失敗":""));
   process.exit(failed?1:0);

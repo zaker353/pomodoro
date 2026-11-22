@@ -26,6 +26,7 @@
 - `review-log.json` — **各類審查的上次日期與週期**（單一來源，見第七之二節）。要改日期／週期／說明就改這份。
 - `review-log.js` — **自動產生，不要手動改**。就是 `review-log.json` 包成 `window.REVIEW_LOG` 給 App 讀（`file://` 開檔不能 fetch JSON，所以比照 `audit-info.js`）。也是外部檔，已在 `sw.js` 的 `FILES`。
 - `scripts/review-log.mjs`（審查紀錄的共用判定邏輯與產生器）、`scripts/review-status.mjs`（`npm run review-status` 印各類審查狀態）。
+- `scripts/mutate.mjs` — 突變測試小工具（故意改壞一處→跑快的那套→一定改回原樣，用法見第 11 條；`tests/test-pomo.js` 有一段拿假檔驗它本身）。
 - `tests/test-pomo.js` — jsdom 假瀏覽器的自動測試（快，每次改完都要跑）。**不要在文件裡寫死幾項**，加測試就會過時；要知道數量就跑一次看總結。
 - `tests/test-firefox.js` — **真實 Firefox** 自動實測（selenium + geckodriver，會真的開 Firefox 打字點按鈕、真的下載匯出檔來檢查）。
 - 我雙擊就能用的：`開啟APP.bat`（打開 App）、`開啟本機伺服器.bat`（用 http://localhost:8931 開 App）、`執行測試.bat`（跑快的那套）、`Firefox實測.bat`（跑真瀏覽器那套）、`看Firefox操作.bat`（同上但會跳出視窗讓我親眼看）。
@@ -122,7 +123,7 @@
     - **只驗函式存在**：`typeof fn === "function"` 把函式掏空也照樣綠。要真的呼叫它、驗它做了事。
     ⚠️ **geckodriver 不支援讀瀏覽器主控台**（回 `HTTP method not allowed`），`driver.manage().logs()` 永遠是空陣列。要由測試的伺服器把攔截器注入頁面，自己收 `window.onerror` 與 `console.error`（`tests/test-firefox.js` 的 `ERR_COLLECTOR`，並有 `--inject-error` 參數可驗證它真的會紅）。
     ⚠️ **最可靠的驗法是突變測試**：把功能改壞、跑測試、確認變紅。這輪就是靠它抓出 9 條假的。
-    ⚠️ **突變怎麼改回來（統籌者自己做也一樣，2026-11-23 規則審查補）**：改壞前先把原檔複製到暫存區、跑完複製回來（或反向取代改回），改回後 `git diff` 確認只剩這次要的改動；**不可用 `git checkout -- <檔>` 還原**（會把同一批還沒 commit 的修改一起沖掉）。用 python/node 改檔一律保留原本的換行（位元組讀寫；文字模式寫回會改掉換行，`git status` 冒出 M）。突變時跑 `node tests/test-pomo.js`，不要跑 `npm test`（它會先重產 `audit-info.js`）。
+    ⚠️ **突變一律用 `node scripts/mutate.mjs <檔> <原字串> <改壞字串> --expect <測試名稱的一段>`（統籌者與代理都一樣，2026-11-23）**：它自己存原檔位元組、確認原字串剛好出現一次、改壞、跑 `node tests/test-pomo.js`（不是 `npm test`：那個會先重產 `audit-info.js`）、不管結果或出錯一律寫回並比對一模一樣（換行照原檔），印出哪幾條變紅；回 0＝抓到、1＝沒抓到（可能是假防護）。`--expect` 可省略，加了就只看名稱含那一段的測試，免得紅的是別條。同一個檔同時只准一個突變（有鎖，被擋下就等一下再跑）；別人突變的那半分鐘裡跑的測試會看到改壞的檔，紅得莫名其妙先重跑一次。參數有單引號或換行時，bash 用 `$'…'`。工具辦不到的（一次改兩處、突變 Firefox 那套）才手動：先存原檔位元組、改回後比對一致，**不可用 `git checkout -- <檔>` 還原**（會把同一批還沒 commit 的修改一起沖掉）。平常用 python/node 改檔也一律位元組讀寫、保留原本的換行（有的檔 CRLF、有的 LF，文字模式寫回會改掉換行，`git status` 冒出 M）。
     ← 證據：曾有測試因為比對對象寫錯而永遠綠燈；也有過「舉一個尚未完成的東西當例子」的測試，那件事一完成測試就過期。
 
 12. **想寫測試之前，先跑一次看它會抓到什麼。** 抓到一堆其實不是錯的東西，就不該寫成測試（會變成天天要人忽略的雜訊）。
@@ -309,9 +310,6 @@
 
 做完的都已刪掉（做了什麼看 git log；決定不做的在第六節末「已決定、不要當成 bug 修掉的行為」、`review-log.json` 各類的 `declinedIdeas`、`index.html` 的 `AUDIT_DECLINED_IDEAS`）。
 
-**2026-11-23 規則審查收尾的 4 件，我決定都照建議**（清除前交代「新對話再繼續」；「資料與同步」範圍加情境、「取較新只准 saveData 寫」的守門測試已做）。**照下面順序一件一件做**（講好順序，每件各自回報、回報完可直接接著做下一件）：
-1. **突變測試小工具 `scripts/mutate.mjs <檔> <原字串> <改壞字串>`**：自動存原檔位元組、確認原字串剛好出現一次、改壞、跑 `node tests/test-pomo.js`、改回並比對一模一樣（保留原本的換行）。補一條測試驗它真的會還原。做完把 CLAUDE.md 第 11 條與三個代理檔（`.claude/agents/`）裡的突變步驟縮成「用 `scripts/mutate.mjs`」——四處一起改，只改一邊會漂移。
-- 規則審查收尾的第 3 件「體檢收尾漏跑 `audit-count` 改由程式擋」決定不做，已寫進 `review-log.json` 規則那筆的 `declinedIdeas`。
-- ⚠️ 體檢計數已到 10/10（守門測試那個 commit），App 會提醒該做全面體檢——照第 35 條先問我要不要做，不要自己開始。
+- ⚠️ 體檢計數已到 10/10（2026-11-23「取較新只准 saveData 寫」守門測試那個 commit 起），App 會提醒該做全面體檢——照第 35 條先問我要不要做，不要自己開始。
 
 **做完任何一項，記得把它從這裡刪掉。**
