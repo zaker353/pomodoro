@@ -308,11 +308,12 @@
 
 做完的都已刪掉（做了什麼看 git log；決定不做的在第六節末「已決定、不要當成 bug 修掉的行為」、`review-log.json` 各類的 `declinedIdeas`、`index.html` 的 `AUDIT_DECLINED_IDEAS`）。
 
-**2026-11-23 規則審查收尾、等我決定的 4 件**（Claude 都附了建議；我決定後照做並刪掉這段，否決的寫進 `review-log.json` 那一類的 `declinedIdeas`）：
-1. **突變測試小工具**（建議做，不急）：寫 `scripts/mutate.mjs <檔> <原字串> <改壞字串>`，自動存原檔、改壞、跑 `node tests/test-pomo.js`、改回並比對一模一樣。現在這套步驟寫在 CLAUDE.md 第 11 條與三個代理檔共四處，11-23 統籌者自己還因換行格式卡了兩次；有工具就縮成一句「用 mutate.mjs」。約 40 行＋一條測試。
-2. **「取較新」的資料只准在 `saveData()` 裡寫存檔**（建議做，不急）：加一條測試，數 `index.html` 裡寫 `pomo_settings`／`pomo_mixvol`／`pomo_focusmix`／`pomo_tasks`／`pomo_favmixes`／`pomo_presets`／`pomo_tombs`／`pomo_sessions`／`pomo_settingsat` 的地方只准在 `saveData()` 裡（例外列名單）。11-23 抓到的「跟著計時記專注組合繞過 `saveData()`、時間戳沒蓋」就是這種，現有的「都走 `lsSet()`」測試看不出來。約 10 行。
-3. **體檢收尾漏跑 `audit-count` 改由程式擋**（建議不做）：體檢指令已經寫明這一步、也有測試守著指令裡有這句；四次體檢漏過兩次，但漏了只是線上版多提醒幾天、不傷資料，為它加一道「HEAD 是體檢 commit 時檢查計數」的邏輯不划算。
-4. **「資料與同步」審查範圍加一個情境**（建議做，順手）：「時鐘較快那台建的東西，這台刪掉或還原後同步對不對」。11-23 抓到的墓碑時間問題屬於那一類，但它的範圍只寫了設定的時鐘較快；只改 `review-log.json` 一句。
+**2026-11-23 規則審查收尾的 4 件，我決定都照建議**（清除前交代「新對話再繼續」）。**下一個對話照下面順序一件一件做**（講好順序，每件各自回報、回報完可直接接著做下一件）：
+1. **「資料與同步」審查範圍加一個情境**（順手，先做）：`review-log.json` 裡 id 為 data 那筆的 `scope` 加「時鐘較快那台建的東西，這台刪掉或還原後同步對不對」，跑 `npm test` 重產 `review-log.js`。只改審查紀錄，不算實質改動、不用加版本號。
+2. **守門測試：「取較新」的資料只准在 `saveData()` 裡寫存檔**：在 `tests/test-pomo.js` 加一條，數 `index.html` 裡寫 `pomo_settings`／`pomo_mixvol`／`pomo_focusmix`／`pomo_tasks`／`pomo_favmixes`／`pomo_presets`／`pomo_tombs`／`pomo_sessions`／`pomo_settingsat` 的地方，只准在 `saveData()` 函式本體裡；先跑一次看會抓到哪些（第 12 條），真的該例外的列名單並寫明為什麼。故意加一處直接寫存檔確認會紅（第 11 條）。11-23 抓到的「跟著計時記專注組合繞過 `saveData()`」就是這種，現有「都走 `lsSet()`」那條看不出來。只改測試、不用加版本號。
+3. **突變測試小工具 `scripts/mutate.mjs <檔> <原字串> <改壞字串>`**：自動存原檔位元組、確認原字串剛好出現一次、改壞、跑 `node tests/test-pomo.js`、改回並比對一模一樣（保留原本的換行）。補一條測試驗它真的會還原。做完把 CLAUDE.md 第 11 條與三個代理檔（`.claude/agents/`）裡的突變步驟縮成「用 `scripts/mutate.mjs`」——四處一起改，只改一邊會漂移。
+- 第 3 件「體檢收尾漏跑 `audit-count` 改由程式擋」決定不做，已寫進 `review-log.json` 規則那筆的 `declinedIdeas`。
+- ⚠️ 體檢計數現在 9/10：上面第 2 件一提交就到 10，App 會提醒該做全面體檢——照第 35 條先問我要不要做，不要自己開始。
 
 **要我本人做的**：聽 24 種聲音實際聽起來對不對，尤其褐色噪音與風扇同一個音量格差約 32 dB（音檔本身的大小聲）；聽了覺得差太多再決定要不要做「各音效音量校正」。
 
