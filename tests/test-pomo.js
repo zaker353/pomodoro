@@ -1823,6 +1823,47 @@ const LAST_WEEK_DAY = daysAgoStr(7);
       msgs.length===2 && msgs.every(m=>m.includes("進行中的這一輪計時也會重設")), msgs.length+" 個確認框");
     E("resetTimer(); ghHideHistory(); localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); sessions=[]; saveData(); clearTimeout(ghUploadTimer); ghDirty=false; ghRender(); settings.microEx=true; saveData();");
   }
+
+  // 11.8 🔄 「重設」鈕:專注做滿 1 分鐘先問一句(2026-11-22 功能實測改良建議 A)。
+  // 一律按畫面上那顆鈕(.click()),才驗得到鈕真的接到會問的那個函式
+  {
+    E("closeMood(); settings.strict=false; settings.countUp=false; settings.work=25; settings.autoStartBreak=false; routine=null; countUpOverride=false; saveData(); switchMode('focus',false);");
+    const msgs = []; let answer = false;
+    w.confirm = m => { msgs.push(m); return answer; };
+    const resetBtn = () => d.getElementById("resetBtn").click();
+    // 倒數進行中、已做 3 分鐘:要問,按取消這一輪還在
+    E("toggleTimer(); endAt-=3*60000;");
+    resetBtn();
+    check("🔄 倒數做了 3 分鐘按「重設」會先問,講出做了幾分鐘", msgs.length===1 && msgs[0].includes("已經做了 3 分鐘"), msgs[0]);
+    check("🔄 按取消:這一輪還在、照常倒數", E("phaseStarted")===true && E("running")===true && E("Math.round((endAt-Date.now())/60000)")===22);
+    answer = true; resetBtn();
+    check("🔄 按確定:重設回 25:00、沒開始", msgs.length===2 && E("phaseStarted")===false && E("running")===false && E("remainMs")===25*60000);
+    // 暫停中(running 是 false)也要問
+    msgs.length = 0; answer = false;
+    E("toggleTimer(); toggleTimer(); remainMs=10*60000;");
+    resetBtn();
+    check("🔄 倒數暫停中(已做 15 分鐘)按「重設」也會問", msgs.length===1 && msgs[0].includes("已經做了 15 分鐘") && E("phaseStarted")===true && E("remainMs")===10*60000, msgs[0]);
+    E("resetTimer();");
+    // 不到 1 分鐘:直接重設、不問
+    msgs.length = 0;
+    E("toggleTimer(); endAt-=30*1000;");
+    resetBtn();
+    check("🔄 才做 30 秒按「重設」不問、直接重設", msgs.length===0 && E("phaseStarted")===false);
+    // 正計時:累積 5 分鐘(暫停中)要問
+    E("settings.countUp=true; saveData(); switchMode('focus',false); toggleTimer(); toggleTimer(); cuAccum=5*60000; updateButtons();");
+    resetBtn();
+    check("🔄 正計時做了 5 分鐘按「重設」會問,按取消累積的時間還在", msgs.length===1 && msgs[0].includes("已經做了 5 分鐘") && E("cuAccum")===5*60000, msgs[0]);
+    answer = true; resetBtn();
+    check("🔄 正計時按確定才歸零", msgs.length===2 && E("cuAccum")===0 && E("phaseStarted")===false);
+    E("settings.countUp=false; saveData(); switchMode('focus',false);");
+    // 休息時段不問(休息不記錄,重設只是讓休息重新算)
+    msgs.length = 0;
+    E("switchMode('short',false); toggleTimer(); endAt-=3*60000;");
+    resetBtn();
+    check("🔄 休息做了 3 分鐘按「重設」不問、直接重新算", msgs.length===0 && E("mode")==="short" && E("phaseStarted")===false && E("remainMs")===5*60000);
+    E("switchMode('focus',false);");
+    w.confirm = () => true;
+  }
   console.log(results.join("\n"));
   console.log("\n總結:"+(results.length-failed)+"/"+results.length+" 通過"+(failed?"、"+failed+" 個失敗":""));
   process.exit(failed?1:0);

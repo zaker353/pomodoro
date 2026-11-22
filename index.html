@@ -452,7 +452,7 @@
       <div id="time">25:00</div>
       <div id="roundLabel"></div>
       <div class="timer-btns">
-        <button class="btn sub" id="resetBtn" onclick="resetTimer()">重設</button>
+        <button class="btn sub" id="resetBtn" onclick="askResetTimer()">重設</button>
         <button class="btn" id="startBtn" onclick="toggleTimer()">開始</button>
         <button class="btn sub" id="skipBtn" onclick="skipPhase()">跳過</button>
         <button class="btn sub" id="doneBtn" onclick="finishCountUp()" style="display:none">完成</button>
@@ -740,7 +740,7 @@
           1. (可選)先到「任務」頁新增要做的事,回來選好這一輪要做什麼。<br>
           2. 按「開始」專心做事,時間到會響鈴自動進入休息。<br>
           3. 休息完再按開始,進入下一輪。<br><br>
-          <b>按鈕說明:</b>「跳過」= 放棄這一輪不計入統計;「重設」= 這一輪重新來過;<b>「正計時模式」</b>= 不想被倒數壓迫時打開,改成做多久記多久(一輪最多記 4 小時),結束時按「完成」記錄。<br><br>
+          <b>按鈕說明:</b>「跳過」= 放棄這一輪不計入統計;「重設」= 這一輪重新來過(專注做滿 1 分鐘會先問一句,免得手滑);<b>「正計時模式」</b>= 不想被倒數壓迫時打開,改成做多久記多久(一輪最多記 4 小時),結束時按「完成」記錄。<br><br>
           上方的<b>情境按鈕</b>(預設有工作/讀書/放鬆,可以自己增刪修改)會一鍵幫你調好時長和背景音,不用每次設定。情境如果設了「自動連跑 N 輪」,按下去會用該情境的時長倒數(連跑需要固定的結束點才接得下去);若你原本開著正計時,跑完會自動恢復。
         </div>
       </details>
@@ -1413,6 +1413,23 @@ function resetTimer(){
   $("phaseLabel").textContent = mode==="focus" ? "準備開始專注" : "休息一下吧";
   updateDisplay(); updateButtons(); saveTimerState(); releaseWake();
   renderTaskSelect();
+}
+// 這一輪專注已經做了多久(毫秒);休息時段、還沒開始都是 0
+function focusElapsedMs(){
+  if(mode!=="focus") return 0;
+  if(isCountUpFocus()) return cuAccum+(running?Date.now()-cuStart:0);
+  if(!phaseStarted) return 0;
+  const left = running ? Math.max(0,endAt-Date.now()) : remainMs;
+  return Math.max(0, (phaseMin||settings.work)*60000-left);
+}
+// 「重設」鈕:專注做滿 1 分鐘就先問一句——重設鈕就在「開始」旁邊,手滑就丟掉 20 分鐘;
+// 「跳過」「切模式」都會問,只有它不問(2026-11-22 功能實測的改良建議)。門檻跟正計時「滿 1 分鐘才記錄」一樣。
+// 休息時段不問:休息本來就不記錄,重設只是讓休息重新算,不會丟掉任何東西。
+// 程式內部要歸零(正計時不到 1 分鐘按完成、切正計時開關)直接叫 resetTimer(),不走這裡。
+function askResetTimer(){
+  const ms=focusElapsedMs();
+  if(ms>=60000 && !confirm("這一輪專注已經做了 "+Math.floor(ms/60000)+" 分鐘,重設的話這段不會計入統計,確定要重新開始嗎?")) return;
+  resetTimer();
 }
 
 function skipPhase(){
