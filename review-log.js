@@ -2,7 +2,7 @@
 // 來源:review-log.json(要改日期/週期/說明就改那份);產生者:scripts/gen-audit-info.mjs(跑 npm test 時會自動更新)
 // 用途:讓 App 顯示各類審查的上次日期與到期狀態(file:// 開檔不能 fetch JSON,所以包成 .js)。
 window.REVIEW_LOG = {
-  "_說明": "各類審查的「上次做的日期」與「多久該再做一次」。單一來源:App 設定頁的「🗓 審查紀錄」卡、計時頁的到期橫幅、npm run review-status 都讀這裡(App 讀的是 review-log.js,那是跑 npm test 時從這份自動產生的,不要手改)。做完某一類審查就把該類的 lastReviewedAt 改成當天、note 整段換成這次做了什麼;用該類審查指令單獨整輪做完的,lastStandaloneAt 也改成當天、note 開頭寫「找到 N 條(會弄丟或記錯紀錄 M 條)」(判準見 CLAUDE.md 第 36 條),跟那次的修改一起 commit;只做了一部分就兩個日期都不要改,把做了哪些接在 note 尾巴。規則 09-08、功能實測 09-28 兩筆 lastStandaloneAt 是 2026-11-03 加欄位時追認的(當時還沒有「檢查指令本身」那一條,但都是只針對該類整輪做完)。全面體檢不記這裡(它有自己的計數 audit-count),但體檢收尾要把實際涵蓋到的類別 lastReviewedAt 一起更新(該類 scope 每一項都看過才算;lastStandaloneAt 不動)。lastReviewedAt 寫 null 代表從沒做過、lastStandaloneAt 寫 null 代表還沒單獨審查過。improveHint 是這一類的改良建議往哪找;declinedIdeas 是我否決過的建議(「YYYY-MM-DD 一句話」),審查指令會列出來叫 Claude 不要重提。",
+  "_說明": "各類審查的「上次做的日期」與「多久該再做一次」。單一來源:App 設定頁的「🗓 審查紀錄」卡、計時頁的到期橫幅、npm run review-status 都讀這裡(App 讀的是 review-log.js,那是跑 npm test 時從這份自動產生的,不要手改)。做完某一類審查就把該類的 lastReviewedAt 改成當天、note 整段換成這次做了什麼;單獨做該類審查、範圍整輪看完並做了「檢查這一類的指令本身」的(貼不貼指令都算),lastStandaloneAt 也改成當天、note 開頭寫「找到 N 條(會弄丟或記錯紀錄 M 條)」(判準見 CLAUDE.md 第 36 條),跟那次的修改一起 commit;只做了一部分就兩個日期都不要改,把做了哪些接在 note 尾巴。規則 09-08、功能實測 09-28 兩筆 lastStandaloneAt 是 2026-11-03 加欄位時追認的(當時還沒有「檢查指令本身」那一條,但都是只針對該類整輪做完)。全面體檢不記這裡(它有自己的計數 audit-count),但體檢收尾要把實際涵蓋到的類別 lastReviewedAt 一起更新(該類 scope 每一項都看過才算;lastStandaloneAt 不動)。lastReviewedAt 寫 null 代表從沒做過、lastStandaloneAt 寫 null 代表還沒單獨審查過。improveHint 是這一類的改良建議往哪找;declinedIdeas 是我否決過的建議(「YYYY-MM-DD 一句話」),審查指令會列出來叫 Claude 不要重提。",
   "soonDays": 14,
   "categories": [
     {
@@ -10,9 +10,9 @@ window.REVIEW_LOG = {
       "name": "規則審查",
       "scope": "CLAUDE.md 全文、.claude/agents/ 三個代理檔、index.html 的 AUDIT_PROMPT 體檢指令與 reviewPrompt() 審查指令、review-log.json 本身(各類的範圍、週期、改良方向,五類之間有沒有重疊或沒人管的縫):規則之間有無矛盾、模糊、過時、不會觸發、缺漏;規則說的跟程式做的是否一致",
       "intervalDays": 90,
-      "lastReviewedAt": "2026-09-08",
-      "lastStandaloneAt": "2026-09-08",
-      "note": "24 項發現全部落地:第 29 條與第 28 條及程式相反、計數腳本只認標題列+未提交先算、兩條守門測試、代理檔對齊、localStorage key 表",
+      "lastReviewedAt": "2026-11-23",
+      "lastStandaloneAt": "2026-11-23",
+      "note": "找到 23 條(會弄丟或記錯紀錄 1 條:時鐘較快那台建的任務/組合/情境,這台刪掉後一合併就復活、還原救回的又被別台墓碑刪掉)。統籌者先用腳本掃(函式名與檔名都在、localStorage key 表一致、門檻數字對、條號互引對)找到 2 條,再派兩位 pomo-auditor 分查規則文字本身(11 條)與規則對照程式(6 條+1 條假防護),逐條查證全部屬實並修掉;修完派 pomo-verifier 驗收,另抓 3 條也修掉(跳過還沒開始的專注會把休息的海浪記成專注組合並同步出去,原本就有;組合與情境的時鐘較快測試補上;代理檔的突變還原說法對齊第 11 條)。修了:墓碑時間至少比建立時間晚、還原救回比墓碑晚;跟著計時記下的專注組合改走 saveData()(以前時間戳沒蓋、同步不出去);Firefox「匯出檔不含金鑰」以前匯出時根本沒設定(假防護)改成先填假帳號;體檢指令補「commit 後跑 audit-count 另補 commit」;第 1 條寫明一輪審查算一件;第 11、18 條突變還原不可 checkout 任何路徑;第 14 條上線前一律 test:all;第 33 條體檢範圍;第 34 條與 _說明 的單獨審查定義對齊第 36 條;「到期也先問我」搬進第 35 條;第 28 條合併表的 sessions 與 est 寫法、墓碑也要 Math.max、no-store 的 ?ref= 例外;三個代理檔(修字工跑 Firefox 一次只派一個、驗收起點只看標題、資料安全情境補 11-03/11-23 的、ghEditSeq)、index.html 約 3500→4000 行、第 36 條過時的比較說明、兩處程式註解;第八節只留沒做的。沒修:開啟本機伺服器.bat 先開瀏覽器後開伺服器(屬離線與部署,11-03 實跑可用)",
       "improveHint": "規則能不能更短、更不容易被忘:哪條文字規則可以改成自動測試或腳本守門(程式擋比靠記得可靠)、哪幾條重複可以合併、哪條從來沒觸發過可以刪",
       "declinedIdeas": []
     },

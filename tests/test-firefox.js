@@ -495,6 +495,15 @@ function startServer(){
       tasks=[{id:'exportX',name:'匯出測試任務',done:false,pomos:2,est:0,createdAt:1000}];
       tombs=emptyTombs(); markDeleted('task','tombX'); saveData();
     `);
+    // 匯出當下要有一組雲端設定,「匯出檔絕不含金鑰」才驗得出東西——上面「看以前的備份」那段已經把假設定清掉,
+    // 以前這裡根本沒有設定,那條永遠綠(2026-11-23 規則審查抓到)。
+    // 🔴 安全:同上面的寫法,先關自動同步、只填根本不存在的假帳號,匯出完馬上清掉;匯出本身不連網
+    await js(`
+      ghSetAuto(false);
+      localStorage.setItem('pomo_ghsync', JSON.stringify(
+        {owner:'firefox-test-not-a-real-user', repo:'firefox-test-not-a-real-repo', token:'FAKE_TOKEN_FOR_EXPORT_TEST'}));
+    `);
+    check("🦊 (前置)匯出當下真的有一組假的雲端設定", await val("!!loadGh() && loadGh().token==='FAKE_TOKEN_FOR_EXPORT_TEST'"));
     await clickSafely(By.xpath("//button[contains(., '匯出備份')]"));
     // 等檔案真的「寫完」。Firefox 是先寫 .part 暫存檔、寫完才改名(Windows 上還會先交給防毒掃),
     // 一看到檔名就去讀會讀到半截,所以要等到內容 parse 得起來為止(2026-08-08 踩過,一開始 4 項假失敗)。
@@ -511,6 +520,8 @@ function startServer(){
       if(!parsed) await driver.sleep(250);
     }
     const dlSec = ((Date.now() - dlStart) / 1000).toFixed(1);
+    await js("localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); ghRender();");   // 假設定用完馬上清掉
+    check("🦊 匯出用的假設定已清乾淨", await val("loadGh()===null"));
     check("🦊 按匯出備份,真的有檔案下載下來", !!dlFile, dlFile ? path.basename(dlFile) + "(" + dlSec + " 秒)"
       : "等 " + dlSec + " 秒都沒出現;下載資料夾裡:" + (fs.readdirSync(dlDir).join("、") || "空的"));
     if(dlFile){
@@ -520,7 +531,8 @@ function startServer(){
       check("🦊 匯出的內容真的有我的資料", !!parsed && (parsed.tasks||[]).some(t => t.id === "exportX"));
       check("🦊 匯出的檔案有帶墓碑(否則刪除同步不到別台)", !!parsed && !!parsed.tombs && parsed.tombs.task.tombX > 0);
       check("🦊 匯出檔案絕不含 GitHub 金鑰", !!parsed && !JSON.stringify(parsed).includes("ghsync")
-        && !JSON.stringify(parsed).toLowerCase().includes("token"));
+        && !JSON.stringify(parsed).toLowerCase().includes("token") && !JSON.stringify(parsed).includes("FAKE_TOKEN_FOR_EXPORT_TEST")
+        && !JSON.stringify(parsed).includes("firefox-test-not-a-real"));
     }
 
     /* ---------- 💾 存檔失敗警告:真的瀏覽器裡寫不進去時,警告真的畫得出來、按得到(2026-11-02) ---------- */

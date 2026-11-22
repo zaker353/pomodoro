@@ -652,6 +652,15 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   E("settings.work=41; saveData();");
   check("🛠 改了設定,時間戳會更新", E("settingsAt")>atBefore, atBefore+" → "+E("settingsAt"));
   E("settings.work=25; sessions=[]; saveData();");
+  // 跟著計時記下的專注組合也要蓋設定時間戳、真的存進去(要走 saveData();以前直接寫存檔,時間戳沒蓋,
+  // 下一次存檔前關掉 App 就永遠同步不到別台。2026-11-23 規則審查實測)
+  E("stopAllSounds(); mixVol.rain=61; focusMix={rain:30}; saveData();");
+  const fmAt=E("settingsAt");
+  E("startSound('rain'); rememberFocusMix();");
+  check("🛠 跟著計時記下新的專注組合,設定時間戳會更新、而且存進去",
+    E("settingsAt")>fmAt && w.localStorage.getItem("pomo_settingsat")===String(E("settingsAt")) && JSON.parse(w.localStorage.getItem("pomo_focusmix")).rain===61,
+    fmAt+" → "+E("settingsAt")+" focusMix="+w.localStorage.getItem("pomo_focusmix"));
+  E("stopAllSounds(); focusMix=null; saveData();");
 
   // ④ 休息音效不可以偷換掉他的專注音效組合、也不可以改掉他調的音量
   E("settings.followTimer=true; settings.breakSound='ocean'; mixVol.ocean=88; stopAllSounds();");
@@ -667,6 +676,12 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("🛠 專注組合沒有被偷偷換成海浪",
     E("JSON.stringify(focusMix)")===focusBefore && !E("JSON.stringify(focusMix)").includes("ocean"),
     E("JSON.stringify(focusMix)"));
+  // 休息響的是 App 放的海浪,回到專注還沒按開始就按「跳過」→ 直接又進休息開始(中間沒有 followOnFocusStart):
+  // 海浪不可以被記成專注組合(2026-11-23 規則審查驗收抓到,原本就有)
+  E("followOnBreakStart()");   // 休息開始:App 放海浪
+  E("followOnBreakStart()");   // 跳過還沒開始的專注 → 下一段休息開始
+  check("🛠 跳過還沒開始的專注:休息的海浪不會被記成專注組合",
+    E("JSON.stringify(focusMix)")===focusBefore && !E("JSON.stringify(focusMix)").includes("ocean"), E("JSON.stringify(focusMix)"));
   E("stopAllSounds(); settings.followTimer=false; resetTimer();");
 
   // 11.548 ✨ 2026-08-09 新增的四項(體檢指令另外驗)
@@ -1216,6 +1231,30 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   w.__noTomb = {app:"pomodoro-whitenoise", version:3, sessions:[], settings:{}, tasks:[], favMixes:[], presets:[], waterLog:{}};
   E("applyImport(window.__noTomb)");
   check("🪦 匯入舊版備份(沒有墓碑)會清空墓碑", E("Object.keys(tombs.task).length")===0);
+  // 建立它的那台時鐘較快(建立時間比這台的「現在」還晚 10 分鐘):這台刪掉後,合併那台的舊備份也不可以復活(2026-11-23 規則審查實測)
+  // 任務、組合、情境都走畫面上真的刪除鈕(四個立碑的地方各自要傳建立時間,只測一個守不住另外兩個——驗收抓到)
+  E("tasks=[]; favMixes=[]; presets=[]; tombs=emptyTombs(); saveData();");
+  E("window.__skewAt=Date.now()+600000; tasks.push({id:'skew1',name:'快鐘那台建的',done:false,pomos:0,est:0,createdAt:window.__skewAt,updatedAt:window.__skewAt});"
+    + "favMixes.push({id:'fskew',name:'快鐘組合',mix:{rain:50},createdAt:window.__skewAt,updatedAt:window.__skewAt});"
+    + "presets.push({id:'pskew',icon:'⭐',name:'快鐘情境',work:25,short:5,rounds:0,mix:null,createdAt:window.__skewAt,updatedAt:window.__skewAt}); saveData();");
+  w.__skewOld = JSON.parse(JSON.stringify(E("buildBackupData()")));
+  E("window.confirm=()=>true; deleteTask('skew1'); renderFavs(); pfShowList();");
+  d.querySelector("#favRow .fav-chip .del").click();
+  [...d.querySelectorAll("#peList button")].find(b=>b.textContent==="刪除").click();
+  check("🪦 時鐘較快那台建的任務/組合/情境:墓碑時間都比建立時間晚",
+    E("tombs.task['skew1']>window.__skewAt && tombs.fav['fskew']>window.__skewAt && tombs.preset['pskew']>window.__skewAt")===true,
+    "墓碑-建立="+E("[tombs.task['skew1'],tombs.fav['fskew'],tombs.preset['pskew']].map(t=>t-window.__skewAt).join(',')"));
+  E("mergeBackup(window.__skewOld)");
+  check("🪦 時鐘較快那台建的任務/組合/情境:刪掉後合併它的舊備份不復活",
+    E("tasks.some(t=>t.id==='skew1') || favMixes.some(f=>f.id==='fskew') || presets.some(p=>p.id==='pskew')")===false,
+    E("JSON.stringify([tasks.map(t=>t.id),favMixes.map(f=>f.id),presets.map(p=>p.id)])"));
+  // 還原救回:墓碑來自時鐘較快的那台(比這台的「現在」還晚),救回來的建立時間也要比墓碑晚,否則一合併又被刪
+  E("tasks=[]; tombs=emptyTombs(); tombs.task['skew2']=Date.now()+600000; saveData();");
+  w.__rv = {tasks:[{id:'skew2',name:'要救回來',done:false,pomos:0,est:0,createdAt:1000}]};
+  E("reviveTombed(window.__rv)");
+  check("🪦 還原救回:墓碑來自時鐘較快的那台,救回的也不會再被墓碑擋掉",
+    E("isTombed('task','skew2',window.__rv.tasks[0].createdAt)")===false, "建立時間-墓碑="+E("window.__rv.tasks[0].createdAt-tombs.task['skew2']"));
+  E("tasks=[]; tombs=emptyTombs(); saveData();");
 
   // 12. 重新整理後資料保留 + 週報
   E("tasks=[]; favMixes=[]; presets=[]; tombs=emptyTombs(); saveData();");
@@ -1354,6 +1393,8 @@ const LAST_WEEK_DAY = daysAgoStr(7);
     && (E("AUDIT_DECLINED_IDEAS.length")===0 ? apAll.includes("並說明哪裡變了):目前沒有") : E("AUDIT_DECLINED_IDEAS.every(x=>AUDIT_PROMPT.includes('\\n  - '+x))")));
   check("🗓 體檢指令交代只改規則或說明文字的修正不硬加比對測試(CLAUDE.md 第 12 條)", apAll.includes("只改規則檔或說明文字的修正例外:只有程式依賴那句話") && apAll.includes("其餘不硬加"));
   check("🗓 體檢指令交代「全面稽核」要寫在 commit 標題(計數只看標題)", apAll.includes("commit 的標題(第一行)一定要有「全面稽核」四個字"));
+  // 體檢 commit 之後還要重產 audit-info.js 另補一個 commit,否則線上版一直提醒該做體檢(以前漏過兩次;2026-11-23 規則審查補進指令)
+  check("🗓 體檢指令交代 commit 後要跑 audit-count 補一個 commit", apAll.includes("commit 之後再跑一次 npm run audit-count") && apAll.includes("另外補一個 chore commit 一起 push"));
   check("🗓 體檢指令交代涵蓋整類才改日期、不動單獨審查日",
     apAll.includes("該類範圍(scope)裡每一項都看過才算涵蓋") && apAll.includes("lastStandaloneAt 不要動"));
   // 到期判定的四種狀態(用假資料,不依賴今天是幾號)

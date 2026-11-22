@@ -1082,7 +1082,7 @@ let autoBreakMix=false;
 /* 設定類資料(設定、音量、專注音效組合)最後一次改動的時間。
    合併時「取較新的那邊」,這樣手機改了時長,電腦同步後也會跟著變。
    時間戳是自動維護的:saveData() 每次比對快照,真的變了才更新——
-   靠人記得呼叫遲早會漏(CLAUDE.md 第 22 條的閘門)。 */
+   靠人記得呼叫遲早會漏(CLAUDE.md 第 28 條的閘門)。 */
 let settingsAt=0, settingsSnap="";
 /* 每一筆任務/音效組合/自訂情境的「最後修改時間」。合併時取較新的整筆,
    否則編輯過的內容永遠傳不到另一台(改名字、改情境時長、重新開啟任務都收不到)。
@@ -1190,7 +1190,10 @@ function sanitizeTombs(raw){
 }
 // 常用組合的墓碑鍵:新的用 id,舊資料沒 id 就退回用名稱
 function favKey(f){ return (f && f.id) ? f.id : (f && f.name); }
-function markDeleted(kind, key){ tombs[kind][String(key)]=Date.now(); }  // 之後一定要 saveData()
+// 墓碑時間至少比那一項的建立時間晚 1(2026-11-23 規則審查實測):建立它的那台時鐘較快時,建立時間比這台的「現在」還晚,
+// 只記 Date.now() 的話墓碑反而比建立時間早,isTombed() 當成「刪掉後又重建」放行,下一次合併就復活了(比照 CLAUDE.md 第 28 條 Math.max)。
+// 不會擋到真的重建:重建的東西一律是新的 id。
+function markDeleted(kind, key, createdAt){ tombs[kind][String(key)]=Math.max(Date.now(), (+createdAt||0)+1); }  // 之後一定要 saveData()
 // 這個東西是不是「已經被刪掉、不該再出現」?
 function isTombed(kind, key, createdAt){
   const t=tombs[kind][String(key)];
@@ -1384,7 +1387,9 @@ function activeMixSnapshot(){
 }
 function rememberFocusMix(){
   const cur=activeMixSnapshot();
-  if(cur){ focusMix=cur; lsSet("pomo_focusmix",JSON.stringify(focusMix)); }
+  // 走 saveData():「取較新」的時間戳由它比對快照自動蓋(CLAUDE.md 第 28 條)。以前直接寫存檔,settingsAt 沒蓋、也沒排自動上傳,
+  // 下一次存檔前關掉 App 的話,這次換的組合永遠同步不到別台(2026-11-23 規則審查實測)。沒變就不存,免得每輪都排一次上傳
+  if(cur && JSON.stringify(cur)!==JSON.stringify(focusMix)){ focusMix=cur; saveData(); }
 }
 function followOnFocusStart(){
   if(!settings.followTimer) return;
@@ -1400,7 +1405,9 @@ function followOnFocusStart(){
 }
 function followOnBreakStart(){
   if(!settings.followTimer) return;
-  rememberFocusMix();
+  // 現在響的是 App 自己放的休息音效(上一段休息留下來的)就不記:回到專注還沒按開始就按「跳過」會直接走到這裡,
+  // 以前會把海浪記成專注組合、還同步到別台(2026-11-23 規則審查驗收抓到,原本就有)
+  if(!autoBreakMix) rememberFocusMix();
   if(settings.breakSound==="stop"){ stopAllSounds(); autoBreakMix=true; }   // 也算「App 安排的休息狀態」:休息中手動開的聲音回到專注時不記成專注組合(驗收抓到)
   else if(settings.breakSound==="ocean"){
     // 用他自己設定的海浪音量,不要硬塞 55 —— applyMix 會把音量寫進 mixVol 存檔,
@@ -1634,7 +1641,7 @@ function restoreTimerState(){
     remainMs=s.endAt-Date.now(); endAt=s.endAt; running=true; startTick(); requestWake();
     $("phaseLabel").textContent = mode==="focus" ? "專注中…加油!" : "休息中…放鬆一下";
   }else if(s.running && s.endAt<=Date.now()){
-    // 關頁面期間走完:算完成,記在真正結束的那一刻(s.endAt);結束超過一分鐘的不自動開下一輪(見 advance)
+    // 關頁面期間走完:算完成,記在真正結束的那一刻(s.endAt);結束超過 AUTO_START_GRACE_MS(5 分鐘)的不自動開下一輪(見 advance)
     advance(true, mode==="focus"?(phaseMin||settings.work):0, s.endAt);
   }else if(!s.running && s.remainMs>0 && s.remainMs<(phaseStarted&&phaseMin ? phaseMin : modeMinutes(mode))*60000){   // 已開始的一輪跟 phaseMin 比(暫停中把時長調小再重整,剩餘時間不可以變)
     remainMs=s.remainMs;
@@ -2033,7 +2040,7 @@ function renderFavs(){
     chip.innerHTML='<span>🎵 '+escapeHtml(f.name)+'</span><span class="del">✕</span>';   // 名稱要跳脫,任務與情境都有,只有這裡漏了(2026-11-22 功能實測)
     chip.querySelector(".del").onclick=e=>{
       e.stopPropagation();
-      if(confirm("刪除組合「"+f.name+"」?")){ markDeleted("fav", favKey(f)); favMixes.splice(i,1); saveData(); renderFavs(); }
+      if(confirm("刪除組合「"+f.name+"」?")){ markDeleted("fav", favKey(f), f.createdAt); favMixes.splice(i,1); saveData(); renderFavs(); }
     };
     chip.onclick=()=>{ applyMix(f.mix); toast("🎵 已套用「"+f.name+"」"); };
     row.appendChild(chip);
@@ -2154,7 +2161,7 @@ function pfShowList(){
       +(p.rounds>0?(' · 自動連跑 '+p.rounds+' 輪'):'')+(mixNames?(' · '+mixNames):'')+'</div></span>';
     const eb=document.createElement("button"); eb.textContent="編輯"; eb.onclick=()=>pfEdit(i);
     const db=document.createElement("button"); db.textContent="刪除";
-    db.onclick=()=>{ if(confirm("刪除情境「"+p.name+"」?")){ markDeleted("preset", p.id); presets.splice(i,1); saveData(); pfShowList(); } };
+    db.onclick=()=>{ if(confirm("刪除情境「"+p.name+"」?")){ markDeleted("preset", p.id, p.createdAt); presets.splice(i,1); saveData(); pfShowList(); } };
     el.appendChild(eb); el.appendChild(db);
     list.appendChild(el);
   });
@@ -2246,7 +2253,7 @@ function renameTask(id){
 function deleteTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   if(!confirm("刪除任務「"+t.name+"」?(已記錄的專注時間不會消失)")) return;
-  markDeleted("task", id);
+  markDeleted("task", id, t.createdAt);
   tasks=tasks.filter(x=>x.id!==id);
   if(activeTask===id) activeTask=null;
   saveData(); renderTasks();
@@ -2555,7 +2562,7 @@ function deleteSession(id){
   const s=sessions[i];
   if(!confirm("刪除這筆紀錄?\n"+s.d+(typeof s.t==="number" ? " "+String(s.t).padStart(2,"0")+" 點" : "")+" · "+s.m+" 分鐘"
     +"\n\n刪掉後統計、熱力圖、連續天數都會跟著扣掉,這個動作沒辦法直接復原(有開雲端備份的話,可以從「🕘 看以前的備份」救回)。")) return;
-  markDeleted("session", id);
+  markDeleted("session", id, s.createdAt);
   sessions.splice(i,1);
   saveData(); renderStats(); renderSessionList(); renderTasks();
   toast("已刪除這筆紀錄");
@@ -3554,7 +3561,7 @@ function reviveTombed(data){
   if(Array.isArray(data.sessions)) migrateSessionIds(data.sessions);   // 舊版本的紀錄先補 id,才認得出被刪的是哪一筆
   [["session",data.sessions,s=>s.id],["task",data.tasks,t=>t.id],["fav",data.favMixes,favKey],["preset",data.presets,p=>p.id]]
     .forEach(([kind,list,key])=>{
-      (Array.isArray(list)?list:[]).forEach(it=>{ if(it && isTombed(kind, key(it), it.createdAt)) it.createdAt=now; });
+      (Array.isArray(list)?list:[]).forEach(it=>{ if(it && isTombed(kind, key(it), it.createdAt)) it.createdAt=Math.max(now, tombs[kind][String(key(it))]+1); });   // 墓碑來自時鐘較快的那台時,「現在」還比它早,要再晚 1(2026-11-23)
     });
 }
 /* 還原 = 那個版本的任務/組合/情境與設定「以它為準」:修改時間改成現在(2026-11-03 驗收抓到)。
@@ -3794,8 +3801,9 @@ const AUDIT_PROMPT = [
   "  我以前否決過的(不要重提;情況變了才可以再提,並說明哪裡變了):"+(AUDIT_DECLINED_IDEAS.length ? AUDIT_DECLINED_IDEAS.map(x=>"\n  - "+x).join("") : "目前沒有"),
   "  我否決的寫進 index.html 的 AUDIT_DECLINED_IDEAS(格式「YYYY-MM-DD 一句話」)。",
   "・體檢實際涵蓋到的審查類別(資料與同步/說明與文案/功能實測/離線與部署),把 review-log.json 那幾筆的 lastReviewedAt 改成當天、note 整段換成這次做了什麼(舊 note 裡寫著「沒做、沒重驗」的,這次也沒看就搬過來),跟收尾 commit 一起。",
-  "  該類範圍(scope)裡每一項都看過才算涵蓋;只看了一部分的不改日期,把看了哪些接在 note 尾巴。lastStandaloneAt 不要動(那是用該類審查指令單獨做完才改的)。",
-  "・全部做完後,commit 的標題(第一行)一定要有「全面稽核」四個字(體檢計數靠它歸零;只看標題,寫在內文不算)。"
+  "  該類範圍(scope)裡每一項都看過才算涵蓋;只看了一部分的不改日期,把看了哪些接在 note 尾巴。lastStandaloneAt 不要動(那是單獨做該類審查、整輪看完並檢查過那一類指令本身才改的)。",
+  "・全部做完後,commit 的標題(第一行)一定要有「全面稽核」四個字(體檢計數靠它歸零;只看標題,寫在內文不算)。",
+  "  commit 之後再跑一次 npm run audit-count,把重新產生的 audit-info.js(計數歸零、上次體檢日期變成今天)另外補一個 chore commit 一起 push——漏了這步,線上版會繼續提醒該做全面體檢(CLAUDE.md 第 21 條;以前漏過)。"
 ].join("\n");
 function renderAudit(){
   const box=$("auditCard"); if(!box) return;
