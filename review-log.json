@@ -31,7 +31,7 @@
     {
       "id": "data",
       "name": "資料與同步",
-      "scope": "buildBackupData/mergeBackup/importBackup、墓碑、ghSyncedOk、舊備份(v1~v3)相容、localStorage 每個 key 的合併類別(CLAUDE.md 第 28 條表);拿具體情境跑:A 機刪 B 機合併不復活、同一小時兩筆相同紀錄不被吃掉、新裝置沒對帳不上傳、時鐘較快那台的設定仍同步得出去、兩台同時開著而另一台中間上傳過(上傳前要先合併、不可以蓋掉)、匯入或還原把這台整份換掉之後(之後的自動同步不可以拿舊的對帳結果直接蓋雲端)",
+      "scope": "buildBackupData/mergeBackup/importBackup、墓碑、ghSyncedOk、舊備份(v1~v3)相容、localStorage 每個 key 的合併類別(CLAUDE.md 第 28 條表);拿具體情境跑:A 機刪 B 機合併不復活、同一小時兩筆相同紀錄不被吃掉、新裝置沒對帳不上傳、時鐘較快那台的設定仍同步得出去、時鐘較快那台建的東西(任務/組合/情境)這台刪掉或還原後同步對不對(刪了不復活、還原救回的不被別台墓碑再刪掉)、兩台同時開著而另一台中間上傳過(上傳前要先合併、不可以蓋掉)、匯入或還原把這台整份換掉之後(之後的自動同步不可以拿舊的對帳結果直接蓋雲端)",
       "intervalDays": 90,
       "lastReviewedAt": "2026-11-03",
       "lastStandaloneAt": null,
