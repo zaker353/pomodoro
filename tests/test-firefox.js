@@ -38,9 +38,15 @@ const ERR_COLLECTOR = '<script>window.__errs=[];'
   + (process.argv.includes("--inject-error") ? 'setTimeout(function(){console.error("INJECTED-TEST-ERROR");},50);' : '')
   + '</script>';
 
+// 斷線實測用的開關(見檔案最後「🔌 斷線實測」):
+//   offline = true → 每個連線一進來就切斷(瀏覽器看到的跟伺服器關掉一樣是「連不上」,
+//                     但不用等 Windows 對已關掉的埠重試約 6 秒)
+//   swPatch = 函式 → 改寫送出去的 sw.js(模擬上了新版,觸發換版清快取)
+const SRV = {offline:false, swPatch:null};
 function startServer(){
   return new Promise((resolve, reject) => {
     const srv = http.createServer((req,res)=>{
+      if(SRV.offline){ req.socket.destroy(); return; }
       let p = decodeURIComponent(req.url.split("?")[0]);
       if(p === "/") p = "/index.html";
       const f = path.join(ROOT, p);
@@ -53,6 +59,7 @@ function startServer(){
         if(p === "/index.html"){
           d = Buffer.from(ERR_COLLECTOR + d.toString("utf8"), "utf8");
         }
+        if(p === "/sw.js" && SRV.swPatch) d = Buffer.from(SRV.swPatch(d.toString("utf8")), "utf8");
         res.writeHead(200, {"Content-Type": TYPES[path.extname(f)] || "application/octet-stream"});
         res.end(d);
       });
@@ -562,6 +569,84 @@ function startServer(){
     const pageErrs = await val("JSON.stringify(window.__errs||[])");
     const bad = JSON.parse(pageErrs).filter(m => !/favicon|sw\.js|ServiceWorker|Notification/i.test(m));
     check("🦊 頁面沒有噴出錯誤", bad.length === 0, bad.join(" | ").slice(0,200));
+
+    /* ---------- 🔌 斷線實測:真 Firefox 的離線快取(2026-11-23 收進來,第八節;2026-11-03 全面稽核在暫存區驗過) ----------
+       jsdom 那套(🌐)是用假的 caches 跑 sw.js 的邏輯;這裡是真瀏覽器真的裝 Service Worker、真的斷線。
+       放在最後:會斷線、會換版,做完頁面就不是原本的狀態了。 */
+    await driver.manage().setTimeouts({script: 60000});
+    // 出錯一律變成回傳字串(那一條變紅),不要讓整套測試中斷——斷線開不起來時頁面會停在瀏覽器的錯誤頁
+    const inPage = code => driver.executeAsyncScript(
+      "var done=arguments[arguments.length-1]; (async function(){ " + code + " })().then(done, function(e){ done('錯誤:'+e); });")
+      .catch(e => "例外:" + String(e.message||e).slice(0,80));
+    const swSrc = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
+    const swFiles = ((swSrc.match(/const FILES = \[([\s\S]*?)\];/)||[])[1]||"").match(/"[^"]+"/g).map(s=>JSON.parse(s));
+    const swCache = "pomo-" + (swSrc.match(/CACHE_PREFIX \+ "(v\d+)"/)||[])[1];
+    // ① 等 Service Worker 裝好,sw.js 的 FILES 每一個都在快取裡(離線要用的全部先存好)
+    const missing = await inPage(`
+      if(!('serviceWorker' in navigator)) return '這個瀏覽器沒有 Service Worker';
+      var ok = await Promise.race([navigator.serviceWorker.ready.then(function(){ return true; }), new Promise(function(r){ setTimeout(function(){ r(false); }, 30000); })]);
+      if(!ok) return 'Service Worker 30 秒內沒裝好';
+      var c = await caches.open(${JSON.stringify(swCache)}), miss = [];
+      for (var f of ${JSON.stringify(swFiles)}) if(!(await c.match(f))) miss.push(f);
+      return miss;`);
+    check("🔌 Service Worker 裝好了,sw.js 的 FILES(" + swFiles.length + " 個)全部存進離線快取",
+      Array.isArray(missing) && missing.length===0 && swFiles.length>20, JSON.stringify(missing).slice(0,150));
+    // ② 換版只清自己的舊快取:同一個網址上的英文學習(langlearn-)、塔羅(tarot-)不可以被清掉(2026-07-15 犯過)
+    await inPage(`for (var n of ['langlearn-假的','tarot-假的','pomo-更舊的一版']) await (await caches.open(n)).put('/x-'+n.length, new Response('x'));`);
+    const newCache = swCache + "-換版測試";
+    SRV.swPatch = s => s.replace('CACHE_PREFIX + "' + swCache.slice(5) + '"', 'CACHE_PREFIX + "' + newCache.slice(5) + '"');
+    const keysAfterUpdate = await inPage(`
+      var reg = await navigator.serviceWorker.getRegistration(); await reg.update();
+      for (var i=0; i<80; i++){
+        var k = (await caches.keys()).sort();
+        if(k.indexOf(${JSON.stringify(newCache)})>=0 && k.indexOf(${JSON.stringify(swCache)})<0) return k;
+        await new Promise(function(r){ setTimeout(r, 250); });
+      }
+      return (await caches.keys()).sort();`);
+    check("🔌 上了新版:舊的 pomo- 快取清掉,英文學習與塔羅的快取留著",
+      JSON.stringify(keysAfterUpdate)===JSON.stringify(["langlearn-假的", newCache, "tarot-假的"].sort()), JSON.stringify(keysAfterUpdate));
+    SRV.swPatch = null;
+    // ③ 伺服器連不上(像沒網路)之後重新整理:App 照樣開得起來,音檔、manifest、圖示、外部 .js 都從快取拿得到
+    SRV.offline = true;
+    // ⚠️ 不可以用 driver.navigate().refresh():WebDriver 的重新整理等於 Ctrl+Shift+R 強制重新整理,
+    //    會繞過 Service Worker,斷線時一定開不起來(2026-11-23 實測;driver.get、location.reload() 都正常走快取)
+    await driver.get(url).catch(()=>{});   // 開不起來會停在錯誤頁並丟例外,交給下一行判斷
+    const reopened = await driver.wait(async ()=> await val("typeof addTask==='function'").catch(()=>false), 20000).then(()=>true, ()=>false);
+    check("🔌 連不上伺服器時重新打開,App 照樣從快取開起來",
+      reopened && /^\d{1,2}:\d{2}$/.test(await driver.findElement(By.id("time")).getText().catch(()=>"")));
+    check("🔌 斷線時兩個外部檔(體檢計數、審查紀錄)也從快取載進來", await val("!!window.AUDIT_INFO && !!window.REVIEW_LOG && window.REVIEW_LOG.categories.length>0").catch(()=>false));
+    const offlineGet = await inPage(`
+      async function get(u){ try{ var r = await fetch(u); return r.ok ? (await r.arrayBuffer()).byteLength : 'HTTP '+r.status; }catch(e){ return '拿不到'; } }
+      return { bowl: await get('sounds/bowl.mp3'), manifest: await get('manifest.json'), icon: await get('icon-192.png'), notCached: await get('沒存過的檔-' + Date.now() + '.txt') };`);
+    check("🔌 真的斷線了(沒存進快取的檔案拿不到)——下面幾條才算數", offlineGet.notCached==="拿不到", JSON.stringify(offlineGet));
+    check("🔌 斷線時音檔(這一頁從沒播過的頌缽)從快取拿得到", offlineGet.bowl > 10000, String(offlineGet.bowl));
+    check("🔌 斷線時 manifest 與圖示從快取拿得到", offlineGet.manifest > 50 && offlineGet.icon > 500, offlineGet.manifest + " / " + offlineGet.icon);
+    // ④ 雲端備份(GitHub)的回應不可以存進快取:連不上 GitHub 時,不可以拿舊的備份冒充剛下載的(2026-11-03 全面稽核真 Firefox 重現)。
+    //    不連真的 GitHub:另開一個假的「雲端」伺服器(不同埠 = 跨網域,跟 GitHub 一樣),先拿一次、再讓它連不上
+    let fakeGhOffline = false;
+    const fakeGh = http.createServer((req,res)=>{
+      if(fakeGhOffline){ req.socket.destroy(); return; }
+      res.writeHead(200, {"Content-Type":"application/json", "Access-Control-Allow-Origin":"*"});
+      res.end(JSON.stringify({sessions:[{id:"舊的雲端備份"}]}));
+    });
+    await new Promise(r=>fakeGh.listen(0, "127.0.0.1", r));
+    const ghUrl = "http://127.0.0.1:" + fakeGh.address().port + "/repos/o/r/contents/pomodoro-backup.json";
+    try{
+      const ghRes = await inPage(`
+        var u = ${JSON.stringify(ghUrl)}, out = {};
+        try{ out.online = (await (await fetch(u, {cache:'no-store'})).json()).sessions[0].id; }catch(e){ out.online = '拿不到'; }
+        await new Promise(function(r){ setTimeout(r, 500); });   // 給 Service Worker 時間(如果它會存的話)把回應存進快取
+        out.inCache = [];
+        for (var n of await caches.keys()) if(await (await caches.open(n)).match(u)) out.inCache.push(n);
+        out.controlled = !!navigator.serviceWorker.controller;
+        return out;`);
+      fakeGhOffline = true;
+      const ghOff = await inPage(`try{ var r = await fetch(${JSON.stringify(ghUrl)}, {cache:'no-store'}); return '拿到了 HTTP '+r.status; }catch(e){ return '拿不到'; }`);
+      check("🔌 (前置)假雲端連得上時拿得到、頁面由 Service Worker 管著", ghRes.online==="舊的雲端備份" && ghRes.controlled, JSON.stringify(ghRes));
+      check("🔌 雲端的回應沒有被存進離線快取", Array.isArray(ghRes.inCache) && ghRes.inCache.length===0, JSON.stringify(ghRes.inCache));
+      check("🔌 連不上雲端時就是拿不到,不會拿舊的備份冒充剛下載的", ghOff==="拿不到", ghOff);
+    } finally { fakeGh.close(); }
+    SRV.offline = false;
 
   } finally {
     if(driver) await driver.quit().catch(()=>{});
