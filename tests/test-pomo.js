@@ -1335,7 +1335,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
       && p.includes("審查期間只提不動手") && p.includes("修之前就先停下來問我") && p.includes("把這一條連同下面的方向與否決清單寫進派工單")
       && p.includes("6. 檢查這一類的指令本身") && p.includes("上次無可比數字") && p.includes("「這一類指令本身」")
       && p.includes("【上次單獨審查】"+(c.lastStandaloneAt || "還沒有"))
-      && p.includes("lastReviewedAt 與 lastStandaloneAt 都改成做完那天的日期") && p.includes("「找到 N 條(會弄丟資料 M 條)」")
+      && p.includes("lastReviewedAt 與 lastStandaloneAt 都改成做完那天的日期") && p.includes("「找到 N 條(會弄丟或記錯紀錄 M 條)」") && p.includes("找到會弄丟或記錯紀錄的 → 建議縮短")
       && p.includes("開頭先寫「建議做」或「建議不做」")
       && p.includes("只改規則檔或說明文字的修正,只有程式依賴那句話") && p.includes("其餘不硬加")
       && p.includes("線上版(https://zaker353.github.io/pomodoro/)只能看不能寫") && p.includes("絕不在測試環境設定雲端同步、絕不填真的倉庫或金鑰")
