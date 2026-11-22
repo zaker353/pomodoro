@@ -1652,6 +1652,34 @@ const LAST_WEEK_DAY = daysAgoStr(7);
                   + (html.match(/try\{ localStorage\.setItem\(GH_STATUS_KEY/g)||[]).length;
     check("💾 所有存檔都走 lsSet()(沒有別處直接寫 localStorage)", allowed===2 && raw===allowed, "直接寫 "+raw+" 處、其中允許的 "+allowed+" 處");
   }
+  // 「取較新」與會合併的資料只准在 saveData() 裡寫存檔(2026-11-23 規則審查後加):繞過 saveData() 直接寫,
+  // touchChangedItems()/settingsSnap 不會蓋修改時間,改了也同步不出去(11-23 抓到「跟著計時記專注組合」就是這樣)。
+  // 上面「都走 lsSet()」那條看不出來——繞過的那處也是用 lsSet 寫的。
+  // 做法:這些 key 的字串在 index.html 每出現一次,只准是 ① saveData() 本體裡 ② localStorage.getItem("…") 讀取;
+  // 用常數間接寫(const K="pomo_tasks"; lsSet(K,…))也會被數到。localStorage.clear() 會把它們一起清掉,一律不准。
+  // 先跑過一次:現在 0 處,不需要例外名單。
+  {
+    const SAVE_ONLY_KEYS = ["pomo_settings","pomo_mixvol","pomo_focusmix","pomo_tasks","pomo_favmixes","pomo_presets","pomo_tombs","pomo_sessions","pomo_settingsat"];
+    const start = html.indexOf("function saveData(){");
+    const end = start<0 ? -1 : start + html.slice(start).search(/\n\}\r?\n/);   // 頂層函式的結尾是行首的 }
+    const body = end>start ? html.slice(start, end) : "";
+    // 本體抓對了:九個 key 都在裡面寫、而且沒有吃到下一個函式(抓錯範圍會讓下面的檢查形同虛設)
+    const bodyOk = body.length>0 && !/\nfunction /.test(body) && SAVE_ONLY_KEYS.every(k=>body.includes('"'+k+'"'));
+    const lineOf = i => html.slice(0, i).split("\n").length;
+    const bad = [];
+    for(const k of SAVE_ONLY_KEYS){
+      const re = new RegExp("[\"'`]"+k+"[\"'`]", "g");
+      let m;
+      while((m = re.exec(html))){
+        const inSave = m.index>start && m.index<end;
+        const isRead = /localStorage\.getItem\(\s*$/.test(html.slice(Math.max(0, m.index-40), m.index));
+        if(!inSave && !isRead) bad.push(k+"(第 "+lineOf(m.index)+" 行)");
+      }
+    }
+    if(/localStorage\.clear\(/.test(html)) bad.push("localStorage.clear()(第 "+lineOf(html.search(/localStorage\.clear\(/))+" 行)");
+    check("💾 「取較新」與會合併的資料只在 saveData() 裡寫存檔(別處只准 getItem 讀)", bodyOk && bad.length===0,
+      bodyOk ? (bad.length ? "saveData() 以外寫到:"+bad.join("、") : "別處 0 處") : "抓不到 saveData() 本體");
+  }
   // ── 2026-11-03 第一輪驗收抓到的四條。「快滿」= 只有變長(或新的)寫入會失敗,長度不變的照樣寫得進去——
   //    真實的存檔空間就是這樣,全部失敗反而測不出「一半存進去、一半沒有」
   {

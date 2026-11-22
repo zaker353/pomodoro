@@ -219,6 +219,7 @@
     | **在備份裡但不合併** | `activeTask`（合併時只在該任務消失才清空） | 不採用對方的；另外 `tasks[].est`（預估番茄數）跟著整筆取較新，只有本機較新但沒填時才補對方的 |
     ⚠️ **「取較新」的時間戳一律自動維護**：`saveData()` 比對快照，真的變了才蓋時間（`touchChangedItems()` / `settingsSnap`）。
     靠人記得呼叫遲早會漏，這是刻意設的閘門。唯一刻意的例外是「還原以前的版本」的 `markRestoredNewest()`：還原＝那個版本以它為準，所以在 `saveData()` 之外把那個版本的 `updatedAt`／`settingsAt` 改成現在（2026-11-03 全面稽核驗收抓到：不改的話自動同步一合併就輸給雲端較新的那版，被改壞的又蓋回來）。合併與匯入則相反：`mergeBackup()`／`applyImport()` 在 `saveData()` 前先 `touchChangedItems(true)`，保留對方或檔案裡的時間，不可以被蓋成「這台剛改過」。
+    繞過 `saveData()` 直接寫存檔的就不會蓋時間、同步不出去：`tests/test-pomo.js` 的「取較新與會合併的資料只在 saveData() 裡寫存檔」守著——下面表裡「進備份、會合併」那九個 key（`pomo_water`、`pomo_rounds` 除外）在 `index.html` 只准出現在 `saveData()` 本體與 `localStorage.getItem()` 讀取，用常數間接寫或 `localStorage.clear()` 也算，多一處就紅（2026-11-23）。
     ⚠️ 蓋時間一律用 `Math.max(Date.now(), 舊值+1)`，否則另一台時鐘較快時這台永遠同步不出去。墓碑同理：立碑時間至少比那一項的建立時間晚 1（`markDeleted()` 要傳建立時間），還原救回時建立時間至少比墓碑晚 1（`reviveTombed()`）——否則建立它的那台時鐘較快時，刪掉的會復活、救回的又被刪（2026-11-23 規則審查實測）。
     ⚠️ **載入時只 seed 快照、不蓋時間**（`touchChangedItems(true)`），否則每次開 App 都變成「這台剛改過」，別台的修改永遠進不來。
     ← 證據：2026-08-09 稽核發現三個設定欄位完全不合併；08-10 又發現任務／情境／音效組合是「只新增不更新」——
@@ -308,10 +309,9 @@
 
 做完的都已刪掉（做了什麼看 git log；決定不做的在第六節末「已決定、不要當成 bug 修掉的行為」、`review-log.json` 各類的 `declinedIdeas`、`index.html` 的 `AUDIT_DECLINED_IDEAS`）。
 
-**2026-11-23 規則審查收尾的 4 件，我決定都照建議**（清除前交代「新對話再繼續」；「資料與同步」範圍加情境已做）。**照下面順序一件一件做**（講好順序，每件各自回報、回報完可直接接著做下一件）：
-1. **守門測試：「取較新」的資料只准在 `saveData()` 裡寫存檔**：在 `tests/test-pomo.js` 加一條，數 `index.html` 裡寫 `pomo_settings`／`pomo_mixvol`／`pomo_focusmix`／`pomo_tasks`／`pomo_favmixes`／`pomo_presets`／`pomo_tombs`／`pomo_sessions`／`pomo_settingsat` 的地方，只准在 `saveData()` 函式本體裡；先跑一次看會抓到哪些（第 12 條），真的該例外的列名單並寫明為什麼。故意加一處直接寫存檔確認會紅（第 11 條）。11-23 抓到的「跟著計時記專注組合繞過 `saveData()`」就是這種，現有「都走 `lsSet()`」那條看不出來。只改測試、不用加版本號。
-2. **突變測試小工具 `scripts/mutate.mjs <檔> <原字串> <改壞字串>`**：自動存原檔位元組、確認原字串剛好出現一次、改壞、跑 `node tests/test-pomo.js`、改回並比對一模一樣（保留原本的換行）。補一條測試驗它真的會還原。做完把 CLAUDE.md 第 11 條與三個代理檔（`.claude/agents/`）裡的突變步驟縮成「用 `scripts/mutate.mjs`」——四處一起改，只改一邊會漂移。
+**2026-11-23 規則審查收尾的 4 件，我決定都照建議**（清除前交代「新對話再繼續」；「資料與同步」範圍加情境、「取較新只准 saveData 寫」的守門測試已做）。**照下面順序一件一件做**（講好順序，每件各自回報、回報完可直接接著做下一件）：
+1. **突變測試小工具 `scripts/mutate.mjs <檔> <原字串> <改壞字串>`**：自動存原檔位元組、確認原字串剛好出現一次、改壞、跑 `node tests/test-pomo.js`、改回並比對一模一樣（保留原本的換行）。補一條測試驗它真的會還原。做完把 CLAUDE.md 第 11 條與三個代理檔（`.claude/agents/`）裡的突變步驟縮成「用 `scripts/mutate.mjs`」——四處一起改，只改一邊會漂移。
 - 規則審查收尾的第 3 件「體檢收尾漏跑 `audit-count` 改由程式擋」決定不做，已寫進 `review-log.json` 規則那筆的 `declinedIdeas`。
-- ⚠️ 體檢計數現在 9/10：上面第 1 件一提交就到 10，App 會提醒該做全面體檢——照第 35 條先問我要不要做，不要自己開始。
+- ⚠️ 體檢計數已到 10/10（守門測試那個 commit），App 會提醒該做全面體檢——照第 35 條先問我要不要做，不要自己開始。
 
 **做完任何一項，記得把它從這裡刪掉。**
