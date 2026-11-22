@@ -459,8 +459,11 @@ function startServer(){
     const copied = await val("window.__copied||''");
     check("🦊 按下複製鈕真的把指令送進剪貼簿", copied.length > 500 && copied.includes("全面稽核"),
       "複製了 " + copied.length + " 個字");
-    check("🦊 複製後有給使用者回饋", (await driver.findElement(By.id("toast")).getText()).includes("已複製"),
-      await driver.findElement(By.id("toast")).getText());
+    // 提示框要 0.3 秒才淡入完成,以前固定只等 0.3 秒就讀,偶爾讀到還沒顯示出來的空字(重跑就過)。
+    // 改成等到出現為止(最多 2.5 秒;提示框會停 2.8 秒才收起,2026-11-23)
+    const toastText = async () => await driver.findElement(By.id("toast")).getText();
+    const toastSeen = await driver.wait(async () => (await toastText()).includes("已複製"), 2500).then(() => true, () => false);
+    check("🦊 複製後有給使用者回饋", toastSeen, await toastText());
     await js("document.getElementById('auditCard').scrollIntoView({block:'center'})");
     await driver.sleep(400);
     fs.writeFileSync(path.join(__dirname, "screenshots", "全面體檢區塊.png"),
@@ -493,10 +496,13 @@ function startServer(){
       tombs=emptyTombs(); markDeleted('task','tombX'); saveData();
     `);
     await clickSafely(By.xpath("//button[contains(., '匯出備份')]"));
-    // 等檔案真的「寫完」。Firefox 是先建檔再慢慢寫,一看到檔名就去讀會讀到半截,
-    // 所以要等到內容 parse 得起來為止(2026-08-08 踩過,一開始 4 項假失敗)。
+    // 等檔案真的「寫完」。Firefox 是先寫 .part 暫存檔、寫完才改名(Windows 上還會先交給防毒掃),
+    // 一看到檔名就去讀會讀到半截,所以要等到內容 parse 得起來為止(2026-08-08 踩過,一開始 4 項假失敗)。
+    // 一拿到就停、最多等 30 秒:平常 0.1 秒內就有(2026-11-23 連按 30 次實測),以前只等 10 秒,
+    // 電腦忙的時候偶爾等不到(重跑就過)。萬一還是沒有,把下載資料夾裡有什麼列出來,才看得出卡在哪一步。
     let dlFile = null, parsed = null;
-    for(let i=0; i<40 && !parsed; i++){
+    const dlStart = Date.now();
+    while(!parsed && Date.now() - dlStart < 30000){
       const found = fs.readdirSync(dlDir).filter(f => f.endsWith(".json"));
       if(found.length){
         dlFile = path.join(dlDir, found[0]);
@@ -504,7 +510,9 @@ function startServer(){
       }
       if(!parsed) await driver.sleep(250);
     }
-    check("🦊 按匯出備份,真的有檔案下載下來", !!dlFile, dlFile ? path.basename(dlFile) : "等 10 秒都沒出現");
+    const dlSec = ((Date.now() - dlStart) / 1000).toFixed(1);
+    check("🦊 按匯出備份,真的有檔案下載下來", !!dlFile, dlFile ? path.basename(dlFile) + "(" + dlSec + " 秒)"
+      : "等 " + dlSec + " 秒都沒出現;下載資料夾裡:" + (fs.readdirSync(dlDir).join("、") || "空的"));
     if(dlFile){
       check("🦊 檔名是看得懂的中文日期檔名", /^番茄鐘備份_\d{4}-\d{2}-\d{2}\.json$/.test(path.basename(dlFile)),
         path.basename(dlFile));
