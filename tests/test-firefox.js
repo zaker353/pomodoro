@@ -464,10 +464,20 @@ function startServer(){
     const firstReviewName = await val("(window.REVIEW_LOG.categories[0]||{}).name||''");
     const reviewText = await driver.findElement(By.id("reviewCard")).getText();
     check("🦊 設定頁真的畫出審查紀錄卡", firstReviewName && reviewText.includes(firstReviewName) && reviewText.includes("指令"), reviewText.slice(0,60));
+    // 長說明預設收起來(getText 只拿畫面上看得到的字),點「上次做了什麼」才看得到(2026-11-22 功能實測改良建議 B)
+    const firstReviewId = await val("(window.REVIEW_LOG.categories[0]||{}).id||''");
+    const firstNoteHead = (await val("(window.REVIEW_LOG.categories[0]||{}).note||''")).slice(0, 20);
+    check("🦊 審查紀錄卡的長說明預設收起來,畫面上看不到", firstNoteHead.length===20 && !reviewText.includes(firstNoteHead), firstNoteHead);
     await js("document.getElementById('reviewCard').scrollIntoView({block:'center'})");
     await driver.sleep(400);
     fs.writeFileSync(path.join(__dirname, "screenshots", "審查紀錄卡.png"),
       Buffer.from(await driver.takeScreenshot(), "base64"));
+    const noteSummary = await driver.findElement(By.css('#reviewCard .review-row[data-id="'+firstReviewId+'"] details.review-note summary'));
+    await driver.executeScript("arguments[0].scrollIntoView({block:'center'})", noteSummary);
+    await noteSummary.click();
+    await driver.sleep(200);
+    check("🦊 點「上次做了什麼」就看得到那一類的說明", (await driver.findElement(By.id("reviewCard")).getText()).includes(firstNoteHead));
+    await noteSummary.click();
 
     /* ---------- 匯出備份:真的按下去,真的要有檔案掉出來 ---------- */
     // 先放一點資料進去,才驗得出「匯出的內容是對的」

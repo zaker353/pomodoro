@@ -56,6 +56,11 @@
   #reviewBanner .btns button.main{background:var(--accent); color:#fff;}
   .review-row{background:var(--card); border-radius:12px; padding:10px 12px; margin-bottom:8px;}
   .review-head{display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .review-note summary{font-size:12px; color:var(--dim); cursor:pointer; padding:4px 4px 0; list-style:none;}
+  .review-note summary::-webkit-details-marker{display:none;}
+  .review-note summary::after{content:" ▾";}
+  .review-note[open] summary::after{content:" ▴";}
+  .review-note .backup-note{margin-top:4px;}
 
   /* 情境預設 */
   .presets{display:flex; gap:8px; margin-bottom:12px;}
@@ -3887,7 +3892,9 @@ function renderReview(){
     h+='<div class="review-row" data-id="'+reviewEsc(r.id)+'">'
       +'<div class="review-head"><span>'+icon[r.state]+' <b>'+reviewEsc(r.name)+'</b></span>'
       +'<button class="btn" style="flex:0 0 auto;padding:5px 12px;font-size:12px;background:var(--card2);color:var(--text)" onclick="copyReviewPrompt(\''+reviewEsc(r.id)+'\')">📋 指令</button></div>'
-      +'<div class="backup-note" style="margin-top:2px">'+when+'<br>'+reviewEsc(r.note)+'</div>'
+      +'<div class="backup-note" style="margin-top:2px">'+when+'</div>'
+      // 長說明收起來、點開才看:以前全部攤開,手機上這張卡比設定頁三分之一還長,要捲很久才到雲端備份(2026-11-22 功能實測的改良建議)
+      +(r.note ? '<details class="review-note"><summary>上次做了什麼</summary><div class="backup-note">'+reviewEsc(r.note)+'</div></details>' : '')
       +'</div>';
   });
   h+='<div class="backup-note" style="margin-top:10px">做完某一類審查,把 review-log.json 那一筆的日期改成當天、跟那次的修改一起提交,這裡就會更新。全面體檢另有計數,看上面那一區。</div>';

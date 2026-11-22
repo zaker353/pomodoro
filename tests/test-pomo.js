@@ -1349,6 +1349,19 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   const rlCard = d.getElementById("reviewCard").textContent;
   check("🗓 設定頁卡片列出每一類與它的說明", ["甲","乙","丙","丁","n1","n4"].every(n=>rlCard.includes(n)));
   check("🗓 卡片標出從沒做過的類別", rlCard.includes("從沒做過"));
+  // 長說明收起來、點開才看(2026-11-22 功能實測改良建議 B:手機上整張卡佔設定頁三分之一)
+  const rlNoteOf = {a:"n1", b:"n2", c:"n3", d:"n4"};
+  const rlRows = [...d.querySelectorAll("#reviewCard .review-row")];
+  check("🗓 每一類的長說明收在「上次做了什麼」裡、預設收起來", rlRows.length===4 && rlRows.every(row=>{
+    const dt=row.querySelector("details.review-note");
+    return dt && !dt.open && dt.querySelector("summary").textContent.includes("上次做了什麼") && dt.textContent.includes(rlNoteOf[row.dataset.id]);
+  }));
+  check("🗓 日期那一行與「📋 指令」鈕露在外面、不收起來", rlRows.length===4 && rlRows.every(row=>{
+    const dt=row.querySelector("details.review-note"), btn=row.querySelector("button");
+    const outside=row.textContent.replace(dt ? dt.textContent : "", "");
+    return btn && btn.textContent.includes("指令") && !(dt && dt.contains(btn))
+      && (outside.includes("下次") || outside.includes("從沒做過")) && !outside.includes(rlNoteOf[row.dataset.id]);
+  }));
   check("🗓 卡片標出到期的類別數", rlCard.includes("4 類審查到期了"));
   check("🗓 有到期時計時頁出現橫幅", d.getElementById("reviewBanner").style.display==="block" && d.getElementById("reviewBanner").textContent.includes("4 類審查到期"));
   E("dismissReviewBanner()");
@@ -1356,6 +1369,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   E("reviewNagMem=null; localStorage.removeItem('pomo_reviewnag'); window.REVIEW_LOG={soonDays:14,categories:[{id:'a',name:'甲',scope:'x',intervalDays:3650,lastReviewedAt:'2026-01-01',note:''}]}; renderReview(); renderReviewBanner();");
   check("🗓 沒有到期就不出橫幅", d.getElementById("reviewBanner").style.display==="none");
   check("🗓 沒有到期時卡片說沒有到期", d.getElementById("reviewCard").textContent.includes("目前沒有到期的審查"));
+  check("🗓 沒有說明的類別不出現空的「上次做了什麼」", d.querySelectorAll("#reviewCard .review-row").length===1 && !d.querySelector("#reviewCard details"));
   const rlP = E("reviewPrompt('a','2026-02-01')");
   check("🗓 審查指令帶類別名稱、id、今天日期與更新紀錄的交代",
     rlP.includes("「甲」審查") && rlP.includes("id 為「a」") && rlP.includes("複製這份指令時是 2026-02-01") && rlP.includes("review-log.json") && rlP.includes("不要含「全面稽核」"));
