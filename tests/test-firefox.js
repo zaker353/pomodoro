@@ -667,6 +667,11 @@ function startServer(){
       check("🔌 連不上雲端時就是拿不到,不會拿舊的備份冒充剛下載的", ghOff==="拿不到", ghOff);
     } finally { fakeGh.close(); }
     SRV.offline = false;
+    // 斷線時從快取開起來的那一頁,也帶著錯誤收集器(測試伺服器注入的 index.html 跟著存進快取):只有斷線才會出的錯誤也要抓到。
+    // 上面「🦊 頁面沒有噴出錯誤」是斷線前那一頁,管不到這裡(2026-11-24 全面體檢)。加 --inject-error 跑,這條也要紅
+    const offErrs = await val("JSON.stringify(window.__errs||null)").catch(e => "例外:" + String(e.message||e).slice(0,80));
+    let offBad = null; try{ const a = JSON.parse(offErrs); if(Array.isArray(a)) offBad = a.filter(m => !/favicon|sw\.js|ServiceWorker|Notification/i.test(m)); }catch(e){}
+    check("🔌 斷線時從快取開起來的頁面沒有噴出錯誤(錯誤收集器也在)", Array.isArray(offBad) && offBad.length === 0, String(offErrs).slice(0,200));
 
   } finally {
     if(driver) await driver.quit().catch(()=>{});

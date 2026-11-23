@@ -66,8 +66,9 @@ function makeDom(presetStore){
           if (url.includes("/commits?path=")) {
             const h = window.__ghHistory || [];
             if (!h.length) return Promise.resolve({ok:false, status:404, json:()=>Promise.resolve([])});
+            const per = parseInt((url.match(/[?&]per_page=(\d+)/)||[])[1]||"30", 10);   // 跟真的 GitHub 一樣只給 per_page 筆(沒帶就 30;2026-11-24 加)
             return Promise.resolve({ok:true, status:200, json:()=>Promise.resolve(
-              h.map((x,i)=>({sha:"sha"+i, commit:{message:"番茄鐘備份", committer:{date:x.date}}})))});
+              h.slice(0, per).map((x,i)=>({sha:"sha"+i, commit:{message:"番茄鐘備份", committer:{date:x.date}}})))});
           }
           if (url.includes("?ref=")) {
             const sha = decodeURIComponent(url.split("?ref=")[1]);
@@ -395,7 +396,7 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("未設定時顯示設定表單", d.getElementById("ghCard").textContent.includes("私人倉庫") || !!d.getElementById("ghRepo"));
   E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'zaker353',repo:'my-backup',token:'SECRET_TOKEN_123'})); ghRender();");
   check("設定後顯示三顆按鈕", d.getElementById("ghCard").textContent.includes("上傳備份") && d.getElementById("ghCard").textContent.includes("下載並合併") && d.getElementById("ghCard").textContent.includes("下載並覆蓋"));
-  check("按鈕下方有白話說明", d.getElementById("ghCard").textContent.includes("加在一起") && d.getElementById("ghCard").textContent.includes("全部刪掉"));
+  check("按鈕下方有白話說明", d.getElementById("ghCard").textContent.includes("合在一起") && d.getElementById("ghCard").textContent.includes("全部刪掉"));
   check("說明有講「刪除也會同步」", d.getElementById("ghCard").textContent.includes("不會再被另一台救回來"));
   // 上面那段說明是用字串拼 HTML 塞進去的,拼壞了標籤會吃掉後面的東西 → 確認後面的元素都還在
   check("塞說明沒有打破後面的畫面", !!d.getElementById("ghStatus") && !!d.getElementById("ghAutoCb"));
@@ -909,6 +910,8 @@ const LAST_WEEK_DAY = daysAgoStr(7);
   check("體檢指令有「規格可能是錯的」條款", prompt.includes("覺得我的規格哪一條是錯的"));
   check("體檢指令交代收尾要寫「全面稽核」", prompt.includes("全面稽核"));
   check("體檢指令要求做突變測試", prompt.includes("突變測試") && prompt.includes("確認真的變紅"));
+  // 2026-11-24:CLAUDE.md 第 11 條與三個代理檔改成「一律用突變小工具」後,體檢指令沒跟上(全面體檢稽核抓到)
+  check("體檢指令的突變步驟點名用突變小工具", prompt.includes("node scripts/mutate.mjs") && prompt.includes("--expect"));
   check("體檢指令要求修的人不能自己驗收", prompt.includes("修的人不可以自己驗收"));
   check("體檢指令指名三個固定代理(.claude/agents/)",
     prompt.includes("找問題派 pomo-auditor、修完驗收派 pomo-verifier、定案後的機械修改派 pomo-fixer。"));
@@ -1962,6 +1965,12 @@ const LAST_WEEK_DAY = daysAgoStr(7);
     check("🔄 正計時做了 5 分鐘按「重設」會問,按取消累積的時間還在", msgs.length===1 && msgs[0].includes("已經做了 5 分鐘") && E("cuAccum")===5*60000, msgs[0]);
     answer = true; resetBtn();
     check("🔄 正計時按確定才歸零", msgs.length===2 && E("cuAccum")===0 && E("phaseStarted")===false);
+    // 正計時開始後一直沒暫停(cuAccum 還是 0,時間全在 cuStart 那頭):一樣要問(2026-11-24 全面體檢:以前只測了暫停中的)
+    msgs.length = 0; answer = false;
+    E("switchMode('focus',false); toggleTimer(); cuStart=Date.now()-5*60000;");
+    resetBtn();
+    check("🔄 正計時一直沒暫停、做了 5 分鐘按「重設」也會問", msgs.length===1 && msgs[0].includes("已經做了 5 分鐘") && E("running")===true, msgs[0]);
+    answer = true; resetBtn();
     E("settings.countUp=false; saveData(); switchMode('focus',false);");
     // 休息時段不問(休息不記錄,重設只是讓休息重新算)
     msgs.length = 0;
@@ -1991,6 +2000,138 @@ const LAST_WEEK_DAY = daysAgoStr(7);
     check("☁️ 不是今年的:連年份一起寫,失敗的原因照樣顯示", line==="上次自動同步:"+new Date(at).getFullYear()+"/"+md(at)+" "+hm(at)+"(400 天前) 上傳 ❌ 壞了", line);
     E("localStorage.removeItem('pomo_ghsync_status'); localStorage.removeItem('pomo_ghsync'); ghSetAuto(true); clearTimeout(ghUploadTimer); ghDirty=false; ghRender();");
   }
+  // 11.10 🩺 2026-11-24 全面體檢修掉的問題(每一條都故意改壞驗過會紅)。每一段用新開的假裝置,不弄髒上面那台的狀態
+  {
+    const mk = () => { const ww=makeDom(null).window; ww.confirm=()=>true; return {w:ww, d:ww.document, E:c=>ww.eval(c)}; };
+    const base = "settings.strict=false; settings.autoStartWork=false; settings.autoStartBreak=false; settings.microEx=false; settings.moodLog=false; settings.countUp=false; saveData();";
+    const on = X => X.E("JSON.stringify(Object.keys(mixOn).filter(k=>mixOn[k]).sort())");
+    // ① 休息完(響的是 App 放的海浪)先套常用組合或情境、再按開始:響的要是剛套的,不可以被換回舊的專注組合
+    {
+      const X=mk();
+      X.E(base+" settings.followTimer=true; settings.breakSound='ocean'; stopAllSounds(); focusMix={rain:50}; favMixes=[{id:'fz',name:'咖啡',mix:{cafe:40},createdAt:1}]; saveData(); renderFavs();");
+      X.E("switchMode('short',false); followOnBreakStart(); switchMode('focus',false);");   // 休息開始(App 放海浪)→ 回到專注、還沒按開始
+      const pre = on(X);
+      X.d.querySelector("#favRow .fav-chip").click();
+      X.E("toggleTimer();");
+      check("🩺 休息完先套常用組合再按開始:響的是剛套的組合,不被換回舊的專注組合", pre==='["ocean"]' && on(X)==='["cafe"]', pre+" → "+on(X));
+      X.E("resetTimer(); switchMode('short',false); followOnBreakStart(); switchMode('focus',false);"
+        + " presets.push({id:'pz',name:'讀書',work:25,short:5,rounds:0,mix:{stream:40},createdAt:1}); applyPreset(presets.length-1); toggleTimer();");
+      check("🩺 休息完先套情境再按開始:響的是情境的聲音", on(X)==='["stream"]', on(X));
+      X.E("stopAllSounds();");
+    }
+    // ② 一鍵慣例跑到一半,別台把正計時打開、合併進來:下一輪照樣倒數、自己接續;跑完才換成正計時
+    {
+      const X=mk();
+      X.E(base+" presets.push({id:'pr',name:'連跑',work:25,short:5,rounds:2,mix:null,createdAt:1}); applyPreset(presets.length-1);");
+      X.E("mergeBackup({app:'pomodoro-whitenoise',version:4,settings:Object.assign({},settings,{countUp:true}),settingsAt:settingsAt+100000,sessions:[],tasks:[],tombs:{}});");
+      X.E("finishPhase(); finishPhase();");   // 第 1 輪專注走完 → 休息(慣例自動開始)走完 → 第 2 輪專注
+      check("🩺 慣例跑到一半別台打開正計時:下一輪照樣倒數、自己開始(慣例不卡住)",
+        X.E("mode")==="focus" && X.E("isCountUpFocus()")===false && X.E("running")===true && X.E("settings.countUp")===true && !!X.E("routine"),
+        "mode="+X.E("mode")+" 正計時="+X.E("isCountUpFocus()")+" running="+X.E("running"));
+      X.E("finishPhase();");
+      const t = X.d.getElementById("toast").textContent;
+      X.E("switchMode('focus',false);");
+      // 慣例開始時正計時是關的,談不上「恢復」(驗收抓到用字不精確)
+      check("🩺 慣例跑完,別台打開的正計時才生效,提示也講了", X.E("routine")===null && X.E("isCountUpFocus()")===true && t.includes("全部完成") && t.includes("接下來改成正計時模式") && !t.includes("恢復"), t);
+      // 慣例停住時(結束超過 5 分鐘才回來,還沒開始下一輪)自己打開正計時:畫面照樣倒數,要講一聲
+      const Z=mk();
+      Z.E(base+" presets.push({id:'pr4',name:'連跑',work:25,short:5,rounds:3,mix:null,createdAt:1}); applyPreset(presets.length-1); resetTimer();");
+      Z.E("toggleCountUpSetting({checked:true});");
+      const tz = Z.d.getElementById("toast").textContent;
+      check("🩺 慣例停住時打開正計時:講明慣例跑完才換成正計時(開關打勾、畫面照樣倒數)", !!Z.E("routine") && Z.E("isCountUpFocus()")===false && tz.includes("慣例跑完才會換成正計時"), tz);
+      // 反過來:正計時開著時套用連跑,中途別台把正計時關掉 → 跑完不可以說「已恢復正計時模式」
+      const Y=mk();
+      Y.E(base+" settings.countUp=true; saveData(); switchMode('focus',false); presets.push({id:'pr2',name:'連跑',work:25,short:5,rounds:1,mix:null,createdAt:1}); applyPreset(presets.length-1);");
+      Y.E("mergeBackup({app:'pomodoro-whitenoise',version:4,settings:Object.assign({},settings,{countUp:false}),settingsAt:settingsAt+100000,sessions:[],tasks:[],tombs:{}});");
+      Y.E("finishPhase();");
+      const t2 = Y.d.getElementById("toast").textContent;
+      check("🩺 慣例中途別台把正計時關掉:跑完不說「已恢復正計時模式」", t2.includes("全部完成") && !t2.includes("恢復正計時"), t2);
+    }
+    // ③ 一輪開始時還沒有任何任務,中途新增第一個(自動變成目前任務):這一輪記在它身上
+    {
+      const X=mk();
+      X.E(base+" tasks=[]; activeTask=null; sessions=[]; saveData(); renderTasks(); switchMode('focus',false); toggleTimer();");
+      X.d.getElementById("taskInput").value="寫報告"; X.E("addTask();");
+      X.E("finishPhase(); closeMood();");
+      const tid = X.E("tasks[0].id");
+      check("🩺 一輪開始時還沒有任務、中途新增第一個:這一輪記在它身上(跟任務頁標的目前任務一致)",
+        X.E("activeTask")===tid && X.E("sessions[sessions.length-1].task")===tid && X.E("tasks[0].pomos")===1, X.E("JSON.stringify(sessions[sessions.length-1])"));
+    }
+    // ④ 慣例進行中匯入覆蓋(還原、下載並覆蓋走同一條 applyImport):慣例一起結束
+    {
+      const X=mk();
+      X.E(base+" presets.push({id:'pr3',name:'連跑',work:25,short:5,rounds:3,mix:null,createdAt:1}); applyPreset(presets.length-1);");
+      const pre = X.d.getElementById("roundLabel").textContent;
+      X.E("applyImport({app:'pomodoro-whitenoise',version:4,settings:Object.assign({},settings),settingsAt:1,sessions:[],tasks:[],favMixes:[],presets:[],waterLog:{}});");
+      const after = X.d.getElementById("roundLabel").textContent;
+      check("🩺 慣例進行中匯入覆蓋:慣例一起結束,畫面不再寫「慣例 第 1/3 輪」",
+        pre.includes("慣例") && X.E("routine")===null && X.E("phaseStarted")===false && !after.includes("慣例"), pre+" → "+after);
+    }
+    // ⑤ 全螢幕時鐘:還沒開始不寫「暫停中」,真的暫停才寫
+    {
+      const X=mk();
+      X.E(base+" switchMode('focus',false); openFsClock(); updateDisplay();");
+      const fs1 = X.d.getElementById("fsPhase").textContent;
+      X.E("toggleTimer(); toggleTimer(); updateDisplay();");
+      const fs2 = X.d.getElementById("fsPhase").textContent;
+      X.E("closeFsClock(); resetTimer();");
+      check("🩺 全螢幕時鐘:還沒開始不寫「暫停中」,真的暫停才寫", fs1==="專注" && fs2.includes("暫停中"), fs1+" / "+fs2);
+    }
+    // ⑥ 跟著計時記專注組合:內容一樣、只是開聲音的先後不同,不算改了(否則蓋上「這台剛改過」,別台剛改的設定被打回去)
+    {
+      const X=mk();
+      X.E(base+" stopAllSounds(); mixVol.cafe=30; mixVol.rain=50; focusMix={rain:50,cafe:30}; saveData(); settingsAt=1000; settingsSnap=settingsSnapshot();");
+      X.E("startSound('cafe'); startSound('rain'); rememberFocusMix();");   // 這次先開咖啡廳:mixOn 的順序跟 focusMix 相反
+      check("🩺 跟著計時記專注組合:內容一樣只是順序不同,設定時間戳不動", X.E("settingsAt")===1000, String(X.E("settingsAt")));
+      X.E("startSound('fire'); rememberFocusMix();");
+      check("🩺 (對照)真的換了組合,設定時間戳照樣更新", X.E("settingsAt")>1000 && X.E("JSON.stringify(focusMix)").includes("fire"), String(X.E("settingsAt")));
+      X.E("stopAllSounds();");
+    }
+    // ⑦ 用匯出檔「匯入備份」救回誤刪的:另一台(還留著墓碑)同步後不會再刪掉——跟「還原以前的版本」一樣
+    {
+      const A=mk(), B=mk();
+      A.E(base+" tasks=[{id:'ty',name:'會被誤刪',done:false,pomos:0,createdAt:2000}]; sessions=[{id:'sy',d:'2026-09-01',m:25,t:9}]; tombs=emptyTombs(); saveData();");
+      const file = JSON.stringify(A.E("buildBackupData()"));   // 刪之前匯出的檔
+      B.w.__v=file; B.E("tasks=[]; sessions=[]; tombs=emptyTombs(); mergeBackup(JSON.parse(window.__v))");
+      A.E("deleteTask('ty'); deleteSession('sy');");
+      B.w.__v=JSON.stringify(A.E("buildBackupData()")); B.E("mergeBackup(JSON.parse(window.__v))");
+      check("🩺 (前置)兩台都刪掉了", !B.E("tasks.some(t=>t.id==='ty')") && !B.E("sessions.some(s=>s.id==='sy')") && !A.E("tasks.some(t=>t.id==='ty')"));
+      A.w.__imp=file; A.E("importBackup({files:[new Blob([window.__imp],{type:'application/json'})], value:''})"); await sleep(300);
+      B.w.__v=JSON.stringify(A.E("buildBackupData()")); B.E("mergeBackup(JSON.parse(window.__v))");
+      A.w.__v=JSON.stringify(B.E("buildBackupData()")); A.E("mergeBackup(JSON.parse(window.__v))");
+      const has = X => X.E("tasks.some(t=>t.id==='ty') && sessions.some(s=>s.id==='sy')");
+      check("🩺 用匯出檔匯入救回誤刪的任務與紀錄:另一台同步後不會再被它的墓碑刪掉", has(A) && has(B), "A="+has(A)+" B="+has(B));
+    }
+    // ⑧ 匯入 2026-08-09 以前的舊備份(沒有設定時間戳):當成很舊,跟 v4 舊檔一樣照時間比,別台較新的設定合併得進來
+    {
+      const X=mk();
+      X.E(base+" applyImport({app:'pomodoro-whitenoise',version:2,settings:{work:30},roundCount:0,sessions:[]});");
+      X.E("mergeBackup({app:'pomodoro-whitenoise',version:4,settings:Object.assign({},settings,{work:45}),settingsAt:5000,sessions:[],tasks:[],tombs:{}});");
+      check("🩺 匯入沒有設定時間戳的舊備份後,別台較新的設定合併得進來(舊檔的設定不會蓋掉每一台)", X.E("settings.work")===45, "work="+X.E("settings.work"));
+    }
+    // ⑨ 看以前的備份列得出超過 15 個(一天會上傳十幾次,15 個只夠回到一兩天前)。假帳號、假 fetch,不會連出去
+    {
+      const X=mk();
+      X.E("localStorage.setItem('pomo_ghsync', JSON.stringify({owner:'o',repo:'r',token:'FAKE'})); ghSetAuto(false); ghRender();");
+      X.w.__ghHistory = Array.from({length:40}, (_,i)=>({date:new Date(Date.now()-i*3600000).toISOString(), body:"{}"}));
+      X.E("ghShowHistory()"); await sleep(150);
+      const n = X.d.querySelectorAll("#ghHistory button[onclick^='ghRestore']").length;
+      check("🩺 看以前的備份:列得出超過 15 個版本(40 個全列出來)", n===40, n+" 個");
+    }
+    // ⑩ 慣例進行中,App 關著時結束、隔很久才打開:跟「自動開始」開關一樣不自己接下去(專注、休息兩頭)
+    {
+      const X=mk();
+      const tj = o => X.E("localStorage.setItem('pomo_timer', JSON.stringify(Object.assign({mode:'focus',running:true,endAt:Date.now()-10*3600000,remainMs:0,cuActive:false,cuStart:0,cuAccum:0,routine:{name:'連跑',target:3,done:0},phaseStarted:true,countUpOverride:false,phaseMin:25,pendingCountUp:null,phaseTask:null}, "+o+"))); restoreTimerState(); closeMood();");
+      X.E(base);
+      tj("{}");
+      check("🩺 慣例的專注在 App 關著時結束、10 小時後才打開:休息不自己開始", X.E("mode")!=="focus" && X.E("running")===false && !!X.E("routine"),
+        "mode="+X.E("mode")+" running="+X.E("running"));
+      tj("{mode:'short',phaseMin:5,routine:{name:'連跑',target:3,done:1}}");
+      check("🩺 慣例的休息在 App 關著時結束、10 小時後才打開:下一輪專注不自己開始", X.E("mode")==="focus" && X.E("running")===false && X.E("phaseStarted")===false,
+        "mode="+X.E("mode")+" running="+X.E("running"));
+    }
+  }
+
   // ── 🧪 突變小工具 scripts/mutate.mjs(2026-11-23)本身:改壞→跑測試→一定還原成一模一樣。
   //    拿暫存資料夾裡的假檔與假的小測試(--run)驗,不然它會跑這整套、這整套又跑它,跑不完。
   {
@@ -2050,6 +2191,28 @@ console.log("❌ 外層的改壞"); console.log("\\n總結:0/1 通過"); process
     check("🧪 突變小工具:同一個檔同時兩個突變,第二個被擋下且不動檔案、不刪第一個的鎖",
       nr.status===2 && String(nr.out).includes("另一個突變正在跑") && nr.untouched===true && nr.lockKept===true, JSON.stringify(nr).slice(0,120));
     check("🧪 突變小工具:第一個跑完照樣還原、鎖也清掉(馬上再跑一次可以)", r.status===0 && again.status===0 && same(), "結束碼 "+r.status+"/"+again.status);
+    // ⑨ --expect 只比測試名稱:紅的是乙,但乙的細節(「 — 」後面)剛好含「甲」→ 不算抓到(2026-11-24 全面體檢)
+    const detail = path.join(tmp, "detail.js");
+    fs.writeFileSync(detail, `const s=require("fs").readFileSync(${JSON.stringify(fx)},"utf8"); const a=s.includes("const A = 1;");
+console.log("✅ 甲守得住"); console.log((a?"✅":"❌")+" 乙守得住 — 細節裡提到甲"); console.log("\\n總結:"+(a?2:1)+"/2 通過"); process.exit(a?0:1);`);
+    r = mut(fx, "const A = 1;", "const A = 5;", "--expect", "甲", "--run", detail);
+    check("🧪 突變小工具:--expect 只比測試名稱,別條的細節剛好含那一段字不算抓到", r.status===1 && r.out.includes("紅的是別條") && same(), "結束碼 "+r.status);
+    // ⑩ 寫回失敗(假測試把檔案設成唯讀):回 3、講出備份在哪、鎖與備份留著,不可以丟錯變成 1(2026-11-24 全面體檢實際碰到)
+    const ro = path.join(tmp, "ro.js");
+    fs.writeFileSync(ro, `require("fs").chmodSync(${JSON.stringify(fx)}, 0o444); console.log("❌ 甲守得住"); console.log("\\n總結:0/1 通過"); process.exit(1);`);
+    r = mut(fx, "const A = 1;", "const A = 6;", "--run", ro);
+    try{ fs.chmodSync(fx, 0o666); }catch(e){}
+    const roLock = fs.readdirSync(os.tmpdir()).filter(f=>/^pomo-mutate-.*\.lock$/.test(f)).map(f=>path.join(os.tmpdir(), f))
+      .find(lp=>{ try{ return fs.readFileSync(lp,"utf8").includes(fx); }catch(e){ return false; } });
+    const roBak = roLock ? fs.readFileSync(roLock, "utf8").split("\n")[0] : "";
+    const bakOk = !!roBak && fs.existsSync(roBak) && fs.readFileSync(roBak).equals(FX);
+    const stillBroken = fs.readFileSync(fx, "utf8").includes("const A = 6;");
+    check("🧪 突變小工具:寫不回去時回 3、印出備份位置,鎖與原檔備份都留著讓人手動救",
+      r.status===3 && r.out.includes("還原失敗") && r.out.includes(roBak||"(沒有鎖)") && bakOk && stillBroken, "結束碼 "+r.status+" "+r.out.replace(/\s+/g," ").slice(-80));
+    // 照工具教的手動救回來,收掉鎖與備份
+    if(bakOk) fs.writeFileSync(fx, fs.readFileSync(roBak));
+    try{ if(roBak) fs.unlinkSync(roBak); }catch(e){}
+    try{ if(roLock) fs.unlinkSync(roLock); }catch(e){}
     fs.rmSync(tmp, {recursive:true, force:true});
     // 工具的還原被改壞時(突變測這段的時候),它會故意留下鎖與備份給人手動救;這裡只收拾指向這次假檔的那些
     for(const f of fs.readdirSync(os.tmpdir()).filter(f=>/^pomo-mutate-.*\.lock$/.test(f))){

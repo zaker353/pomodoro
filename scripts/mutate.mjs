@@ -82,12 +82,22 @@ catch(e){
 }
 // 拿到鎖之後才掛「結束時還原」:拿不到鎖就離開的那次不可以去動檔案或刪別人的鎖
 let mutated = false, restored = false;
+// 寫回原檔:Windows 上檔案剛好被別的程式(防毒、編輯器、別人跑的測試)開著時,寫檔會偶爾丟錯(2026-11-24 全面體檢實際碰到
+// 「UNKNOWN: unknown error, open」)。重試幾次;還是不行就回 false,走「🔴 還原失敗」(結束碼 3、鎖與備份留著)——不可以讓錯誤直接丟出去,
+// 那樣結束碼變成 1(看起來像「沒抓到」),也不會印出備份在哪
+function writeBack(){
+  for(let i = 0; i < 8; i++){
+    try{
+      fs.writeFileSync(target, orig);
+      if(fs.readFileSync(target).equals(orig)) return true;
+    }catch(_){}
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);   // 等 0.25 秒再試
+  }
+  return false;
+}
 function restore(){
   if(restored) return true;
-  if(mutated){
-    fs.writeFileSync(target, orig);
-    if(!fs.readFileSync(target).equals(orig)) return false;
-  }
+  if(mutated && !writeBack()) return false;
   restored = true;
   try{ fs.unlinkSync(bak); }catch(_){}
   try{ fs.unlinkSync(lock); }catch(_){}
@@ -109,6 +119,7 @@ try{
   r = spawnSync(process.execPath, [run], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 10 * 60 * 1000 });
 }finally{
   if(!restore()){
+    restored = true;   // 已經宣告失敗:結束時不要再試一次(成功的話會刪掉備份,跟上面印的「備份在哪」對不起來)
     console.error("🔴 還原失敗!原檔備份在 " + bak + ",請把它複製回 " + target + "(鎖檔 " + lock + " 確認後再刪)");
     process.exit(3);
   }
@@ -119,7 +130,8 @@ const lines = (r.stdout || "").split(/\r?\n/);
 const red = lines.filter(l => l.startsWith("❌"));
 const summary = lines.filter(l => l.startsWith("總結")).pop() || "";   // 取最後一行:測試的說明文字裡可能也帶到「總結」
 const crashed = !!r.error || !!r.signal || !summary;
-const hit = expect ? red.filter(l => l.includes(expect)) : red;
+// 只比測試名稱(「 — 」前面那段):後面的細節常帶著畫面文字或 toast 原文,剛好含那一段字就會把別條紅的誤判成抓到(2026-11-24 全面體檢)
+const hit = expect ? red.filter(l => l.split(" — ")[0].includes(expect)) : red;
 if(red.length){
   console.log("\n變紅的 " + red.length + " 條:");
   for(const l of red.slice(0, 20)) console.log("   " + l.slice(0, 200));
